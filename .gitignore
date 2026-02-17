@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+app/node_modules/
+
+# Anchor / Solana build artifacts
+.anchor/
+target/
+app/.next/
+
+# IDL is generated but useful to track
+# !target/idl/
+# !target/types/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keypairs (never commit secrets)
+*-keypair.json
+*.key
+
+# Locks (keep package-lock, ignore Cargo.lock for programs)
+# Cargo.lock is useful for reproducible builds, so track it
+
+# Misc
+*.swp
+*.swo
+*~

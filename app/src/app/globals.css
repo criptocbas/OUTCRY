@@ -1,0 +1,234 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --color-gold: #C6A961;
+  --color-gold-light: #D4B872;
+  --color-gold-dark: #A68B4B;
+  --color-cream: #F5F0E8;
+  --color-jet: #050505;
+  --color-charcoal: #1A1A1A;
+  --color-charcoal-light: #2A2A2A;
+  --color-muted: #6B6B6B;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                               */
+/* ------------------------------------------------------------------ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #050505;
+  color: #F5F0E8;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  position: relative;
+}
+
+/* Subtle noise texture overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Selection                                                          */
+/* ------------------------------------------------------------------ */
+
+::selection {
+  background-color: #C6A961;
+  color: #050505;
+}
+
+::-moz-selection {
+  background-color: #C6A961;
+  color: #050505;
+}
+
+/* ------------------------------------------------------------------ */
+/* Custom Scrollbar                                                   */
+/* ------------------------------------------------------------------ */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #C6A961 #1A1A1A;
+}
+
+/* Webkit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1A1A1A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C6A961;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #D4B872;
+}
+
+/* ------------------------------------------------------------------ */
+/* Wallet Adapter Overrides                                           */
+/* ------------------------------------------------------------------ */
+
+.wallet-adapter-button {
+  background-color: transparent !important;
+  border: 1px solid rgba(198, 169, 97, 0.4) !important;
+  border-radius: 6px !important;
+  color: #C6A961 !important;
+  font-family: 'DM Sans', system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  height: 36px !important;
+  letter-spacing: 0.05em !important;
+  padding: 0 16px !important;
+  text-transform: uppercase !important;
+  transition: all 0.2s ease !important;
+}
+
+.wallet-adapter-button:hover {
+  background-color: rgba(198, 169, 97, 0.1) !important;
+  border-color: #C6A961 !important;
+}
+
+.wallet-adapter-button-trigger {
+  background-color: #C6A961 !important;
+  color: #050505 !important;
+  border: none !important;
+}
+
+.wallet-adapter-button-trigger:hover {
+  background-color: #D4B872 !important;
+}
+
+.wallet-adapter-modal-wrapper {
+  background-color: #1A1A1A !important;
+  border: 1px solid rgba(198, 169, 97, 0.2) !important;
+  border-radius: 12px !important;
+}
+
+.wallet-adapter-modal-title {
+  color: #F5F0E8 !important;
+  font-family: 'Playfair Display', Georgia, serif !important;
+}
+
+.wallet-adapter-modal-list .wallet-adapter-button {
+  border: none !important;
+  border-radius: 8px !important;
+  color: #F5F0E8 !important;
+}
+
+.wallet-adapter-modal-list .wallet-adapter-button:hover {
+  background-color: rgba(198, 169, 97, 0.1) !important;
+}
+
+.wallet-adapter-modal-button-close {
+  color: #F5F0E8 !important;
+}
+
+.wallet-adapter-modal-overlay {
+  background-color: rgba(5, 5, 5, 0.8) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Animations                                                         */
+/* ------------------------------------------------------------------ */
+
+@keyframes live-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.3);
+  }
+}
+
+.animate-live-pulse {
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes timer-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-timer-pulse {
+  animation: timer-pulse 1s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    #1A1A1A 25%,
+    #2A2A2A 50%,
+    #1A1A1A 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes bid-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(198, 169, 97, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 20px 10px rgba(198, 169, 97, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(198, 169, 97, 0);
+  }
+}
+
+.animate-bid-flash {
+  animation: bid-flash 0.6s ease-out;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out;
+}

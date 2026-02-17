@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from "next/server";
+
+const TAPESTRY_BASE = "https://api.usetapestry.dev/v1";
+const API_KEY = process.env.TAPESTRY_API_KEY;
+
+export async function GET(req: NextRequest) {
+  if (!API_KEY) {
+    return NextResponse.json(
+      { error: "Tapestry not configured" },
+      { status: 503 }
+    );
+  }
+
+  const followerId = req.nextUrl.searchParams.get("followerId");
+  const followeeId = req.nextUrl.searchParams.get("followeeId");
+
+  if (!followerId || !followeeId) {
+    return NextResponse.json(
+      { error: "followerId and followeeId are required" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const res = await fetch(
+      `${TAPESTRY_BASE}/followers/check?apiKey=${API_KEY}&followerId=${encodeURIComponent(followerId)}&followeeId=${encodeURIComponent(followeeId)}`
+    );
+    const data = await res.json();
+
+    if (!res.ok) {
+      return NextResponse.json(data, { status: res.status });
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Tapestry follow check error:", error);
+    return NextResponse.json(
+      { error: "Failed to check follow status" },
+      { status: 500 }
+    );
+  }
+}

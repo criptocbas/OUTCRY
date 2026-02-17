@@ -1,0 +1,24 @@
+[package]
+name = "outcry"
+version = "0.1.0"
+description = "OUTCRY — Live Auction Protocol on Solana"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "outcry"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+# init-if-needed is required for winner ATA creation in settle_auction.
+# Only used for token-program-owned ATAs (safe), never for program-owned accounts.
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.32.1", features = ["token", "associated_token"] }
+ephemeral-rollups-sdk = { version = "0.6.5", features = ["anchor", "disable-realloc"] }

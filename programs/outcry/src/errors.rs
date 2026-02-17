@@ -1,0 +1,45 @@
+use anchor_lang::prelude::*;
+
+#[error_code]
+pub enum OutcryError {
+    #[msg("Bid must exceed current bid plus minimum increment")]
+    BidTooLow,
+    #[msg("Auction has not started yet")]
+    AuctionNotStarted,
+    #[msg("Auction has already ended")]
+    AuctionEnded,
+    #[msg("Auction is not in the correct status for this operation")]
+    InvalidAuctionStatus,
+    #[msg("Only the seller can perform this action")]
+    UnauthorizedSeller,
+    #[msg("Bid does not meet reserve price")]
+    BelowReserve,
+    #[msg("Winner deposit insufficient for winning bid")]
+    InsufficientDeposit,
+    #[msg("Auction still has time remaining")]
+    AuctionStillActive,
+    #[msg("Cannot cancel auction with existing bids")]
+    CannotCancelWithBids,
+    #[msg("Nothing to refund")]
+    NothingToRefund,
+    #[msg("Refund only available after settlement or cancellation")]
+    RefundNotAvailable,
+    #[msg("Auction duration is out of valid range")]
+    InvalidDuration,
+    #[msg("Reserve price must be greater than zero")]
+    InvalidReservePrice,
+    #[msg("Deposit amount must be greater than zero")]
+    InvalidDepositAmount,
+    #[msg("Arithmetic overflow")]
+    ArithmeticOverflow,
+    #[msg("Seller cannot bid on their own auction")]
+    SellerCannotBid,
+    #[msg("Maximum number of bidders reached")]
+    AuctionFull,
+    #[msg("Cannot close auction with outstanding deposits — all bidders must claim refunds first")]
+    OutstandingDeposits,
+    #[msg("Cannot close auction while escrow still holds tokens")]
+    EscrowNotEmpty,
+    #[msg("NFT mint must have 0 decimals")]
+    InvalidNftMint,
+}

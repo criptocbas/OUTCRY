@@ -1,0 +1,79 @@
+use anchor_lang::prelude::*;
+
+use crate::{
+    errors::OutcryError,
+    events::BidPlaced,
+    state::{AuctionState, AuctionStatus},
+};
+
+#[derive(Accounts)]
+pub struct PlaceBid<'info> {
+    pub bidder: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = auction_state.status == AuctionStatus::Active @ OutcryError::InvalidAuctionStatus,
+        constraint = auction_state.seller != bidder.key() @ OutcryError::SellerCannotBid,
+    )]
+    pub auction_state: Account<'info, AuctionState>,
+}
+
+pub fn handle_place_bid(ctx: Context<PlaceBid>, amount: u64) -> Result<()> {
+    let clock = Clock::get()?;
+    let auction = &mut ctx.accounts.auction_state;
+    let bidder_key = ctx.accounts.bidder.key();
+
+    // Verify auction hasn't expired
+    require!(
+        clock.unix_timestamp < auction.end_time,
+        OutcryError::AuctionEnded
+    );
+
+    // Validate bid amount
+    if auction.bid_count == 0 {
+        // First bid must meet reserve
+        require!(amount >= auction.reserve_price, OutcryError::BelowReserve);
+    } else {
+        // Subsequent bids must exceed current + increment
+        let min_bid = auction
+            .current_bid
+            .checked_add(auction.min_bid_increment)
+            .ok_or(OutcryError::ArithmeticOverflow)?;
+        require!(amount >= min_bid, OutcryError::BidTooLow);
+    }
+
+    // Validate bidder has sufficient deposit
+    let (_, deposit_amount) = auction
+        .find_deposit(&bidder_key)
+        .ok_or(OutcryError::InsufficientDeposit)?;
+    require!(deposit_amount >= amount, OutcryError::InsufficientDeposit);
+
+    let previous_bid = auction.current_bid;
+
+    auction.current_bid = amount;
+    auction.highest_bidder = bidder_key;
+    auction.bid_count = auction
+        .bid_count
+        .checked_add(1)
+        .ok_or(OutcryError::ArithmeticOverflow)?;
+
+    // Anti-snipe: extend if bid arrives within extension_window of end
+    let time_remaining = auction.end_time - clock.unix_timestamp;
+    if time_remaining < auction.extension_window as i64 {
+        auction.end_time = clock
+            .unix_timestamp
+            .checked_add(auction.extension_seconds as i64)
+            .ok_or(OutcryError::ArithmeticOverflow)?;
+    }
+
+    emit!(BidPlaced {
+        auction: auction.key(),
+        bidder: bidder_key,
+        amount,
+        previous_bid,
+        bid_count: auction.bid_count,
+        new_end_time: auction.end_time,
+    });
+
+    Ok(())
+}
