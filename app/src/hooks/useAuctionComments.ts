@@ -50,11 +50,11 @@ export function useAuctionComments(
       if (activeIdRef.current === auctionId) {
         setComments(result.comments);
       }
-    } catch (err: unknown) {
+    } catch {
+      // Tapestry may not have a content entry for this auction yet.
+      // Treat as empty rather than showing an error.
       if (activeIdRef.current === auctionId) {
-        const message =
-          err instanceof Error ? err.message : "Failed to load comments";
-        setError(message);
+        setComments([]);
       }
     } finally {
       if (activeIdRef.current === auctionId) {

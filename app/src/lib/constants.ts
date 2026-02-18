@@ -11,8 +11,8 @@ export const DELEGATION_PROGRAM_ID = new PublicKey(
 
 // RPC Endpoints
 export const DEVNET_RPC = "https://api.devnet.solana.com";
-export const MAGIC_ROUTER_RPC = "https://devnet.magicblock.app/";
-export const MAGIC_ROUTER_WS = "wss://devnet.magicblock.app/";
+export const MAGIC_ROUTER_RPC = "https://devnet-router.magicblock.app/";
+export const MAGIC_ROUTER_WS = "wss://devnet-router.magicblock.app/";
 
 // PDA Seeds
 export const AUCTION_SEED = Buffer.from("auction");

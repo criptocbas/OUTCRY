@@ -9,8 +9,10 @@ import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 export default function Header() {
   const { publicKey } = useWallet();
   const [scrolled, setScrolled] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const onScroll = () => setScrolled(window.scrollY > 10);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -59,24 +61,26 @@ export default function Header() {
           )}
         </nav>
 
-        {/* Right: Wallet */}
+        {/* Right: Wallet — only render after mount to avoid hydration mismatch */}
         <div className="flex items-center">
-          <WalletMultiButton
-            style={{
-              backgroundColor: "transparent",
-              border: "1px solid rgba(198,169,97,0.4)",
-              borderRadius: "6px",
-              color: "#C6A961",
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: "13px",
-              fontWeight: 500,
-              height: "36px",
-              letterSpacing: "0.05em",
-              padding: "0 16px",
-              textTransform: "uppercase",
-              transition: "all 0.2s ease",
-            }}
-          />
+          {mounted && (
+            <WalletMultiButton
+              style={{
+                backgroundColor: "transparent",
+                border: "1px solid rgba(198,169,97,0.4)",
+                borderRadius: "6px",
+                color: "#C6A961",
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: "13px",
+                fontWeight: 500,
+                height: "36px",
+                letterSpacing: "0.05em",
+                padding: "0 16px",
+                textTransform: "uppercase",
+                transition: "all 0.2s ease",
+              }}
+            />
+          )}
         </div>
       </div>
     </motion.header>

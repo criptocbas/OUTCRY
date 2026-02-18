@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useConnection, useAnchorWallet } from "@solana/wallet-adapter-react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useAnchorWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import type { AccountInfo } from "@solana/web3.js";
 import { Program } from "@coral-xyz/anchor";
 import type BN from "bn.js";
 import { getProgram } from "@/lib/program";
+import { getMagicConnection } from "@/lib/magic-router";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,7 +74,8 @@ export interface UseAuctionReturn {
 }
 
 export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
-  const { connection } = useConnection();
+  // Use Magic Router so we can read delegated accounts from ER
+  const connection = useMemo(() => getMagicConnection(), []);
   const wallet = useAnchorWallet();
 
   const [auction, setAuction] = useState<AuctionAccount | null>(null);

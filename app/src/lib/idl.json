@@ -299,6 +299,181 @@
       "args": []
     },
     {
+      "name": "close_auction",
+      "docs": [
+        "Closes AuctionState, AuctionVault, and escrow ATA after all refunds are claimed.",
+        "Returns rent-exempt lamports to the seller."
+      ],
+      "discriminator": [
+        225,
+        129,
+        91,
+        48,
+        215,
+        73,
+        203,
+        172
+      ],
+      "accounts": [
+        {
+          "name": "seller",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "auction_state"
+          ]
+        },
+        {
+          "name": "auction_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seller"
+              },
+              {
+                "kind": "account",
+                "path": "nft_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auction_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "auction_state"
+              }
+            ]
+          }
+        },
+        {
+          "name": "nft_mint"
+        },
+        {
+          "name": "escrow_nft_token_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "auction_state"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "nft_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "create_auction",
       "discriminator": [
         234,
@@ -1505,6 +1680,21 @@
       "code": 6016,
       "name": "AuctionFull",
       "msg": "Maximum number of bidders reached"
+    },
+    {
+      "code": 6017,
+      "name": "OutstandingDeposits",
+      "msg": "Cannot close auction with outstanding deposits — all bidders must claim refunds first"
+    },
+    {
+      "code": 6018,
+      "name": "EscrowNotEmpty",
+      "msg": "Cannot close auction while escrow still holds tokens"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidNftMint",
+      "msg": "NFT mint must have 0 decimals"
     }
   ],
   "types": [

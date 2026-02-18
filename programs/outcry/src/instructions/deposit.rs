@@ -15,8 +15,10 @@ pub struct Deposit<'info> {
 
     #[account(
         mut,
-        constraint = auction_state.status == AuctionStatus::Created
-            @ OutcryError::InvalidAuctionStatus,
+        constraint = (
+            auction_state.status == AuctionStatus::Created
+            || auction_state.status == AuctionStatus::Active
+        ) @ OutcryError::InvalidAuctionStatus,
     )]
     pub auction_state: Account<'info, AuctionState>,
 

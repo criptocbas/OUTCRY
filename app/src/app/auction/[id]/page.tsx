@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
+import { useState, useEffect, useCallback, useMemo, use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import BN from "bn.js";
 import { useAuction, parseAuctionStatus } from "@/hooks/useAuction";
@@ -16,7 +16,9 @@ import FollowButton from "@/components/social/FollowButton";
 import LikeButton from "@/components/social/LikeButton";
 import CommentSection from "@/components/social/CommentSection";
 import { truncateAddress, formatSOL } from "@/lib/utils";
+import { useTapestryProfile } from "@/hooks/useTapestryProfile";
 import { getProfile, createContent } from "@/lib/tapestry";
+import { DELEGATION_PROGRAM_ID, DEVNET_RPC } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
 // Toast notification
@@ -97,6 +99,32 @@ export default function AuctionRoomPage({
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Check ER delegation status
+  const l1Connection = useMemo(() => new Connection(DEVNET_RPC, "confirmed"), []);
+  const [isDelegated, setIsDelegated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!id) {
+      setIsDelegated(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const auctionPubkey = new PublicKey(id);
+        const [delegationRecord] = PublicKey.findProgramAddressSync(
+          [Buffer.from("delegation"), auctionPubkey.toBuffer()],
+          DELEGATION_PROGRAM_ID
+        );
+        const info = await l1Connection.getAccountInfo(delegationRecord);
+        if (!cancelled) setIsDelegated(info !== null);
+      } catch {
+        if (!cancelled) setIsDelegated(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, l1Connection, auction]); // re-check when auction state changes
 
   // Derive status
   const statusLabel = auction ? parseAuctionStatus(auction.status) : null;
@@ -215,6 +243,39 @@ export default function AuctionRoomPage({
       setActionLoading(false);
     }
   }, [auction, actions, id, addToast, refetch, publicKey]);
+
+  const handleDelegateAuction = useCallback(async () => {
+    if (!auction) return;
+    setActionLoading(true);
+    try {
+      await actions.delegateAuction(
+        new PublicKey(id),
+        auction.nftMint
+      );
+      addToast("Auction delegated to Ephemeral Rollup!", "success");
+      await refetch();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Delegation failed";
+      addToast(msg, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [auction, actions, id, addToast, refetch]);
+
+  const handleUndelegateAuction = useCallback(async () => {
+    if (!auction) return;
+    setActionLoading(true);
+    try {
+      await actions.undelegateAuction(new PublicKey(id));
+      addToast("Auction undelegated back to L1!", "success");
+      await refetch();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Undelegation failed";
+      addToast(msg, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [auction, actions, id, addToast, refetch]);
 
   const handleClaimRefund = useCallback(async () => {
     if (!auction) return;
@@ -388,9 +449,27 @@ export default function AuctionRoomPage({
             transition={{ duration: 0.6, delay: 0.2 }}
             className="flex flex-col gap-6 lg:w-[40%]"
           >
-            {/* Status badge */}
+            {/* Status badge + delegation indicator */}
             <div className="flex items-center justify-between">
-              <AuctionStatus status={auction.status} />
+              <div className="flex items-center gap-3">
+                <AuctionStatus status={auction.status} />
+                {isDelegated !== null && (
+                  <span
+                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium tracking-[0.1em] uppercase ${
+                      isDelegated
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                        : "border-cream/10 bg-cream/5 text-cream/30"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        isDelegated ? "bg-emerald-400 animate-pulse" : "bg-cream/30"
+                      }`}
+                    />
+                    {isDelegated ? "ER Live" : "L1"}
+                  </span>
+                )}
+              </div>
               {isActive && auction.highestBidder && (
                 <span className="text-[10px] tracking-[0.15em] text-cream/30 uppercase">
                   Leader:{" "}
@@ -426,6 +505,14 @@ export default function AuctionRoomPage({
                   SOL
                 </span>
               </div>
+              {auction.currentBid.toNumber() > 0 &&
+                auction.highestBidder &&
+                auction.highestBidder.toBase58() !== "11111111111111111111111111111111" && (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span className="text-[10px] text-cream/30">by</span>
+                    <BidderName wallet={auction.highestBidder.toBase58()} />
+                  </div>
+                )}
             </div>
 
             {/* Bid Panel (only during active auction) */}
@@ -441,23 +528,37 @@ export default function AuctionRoomPage({
                 onDeposit={handleDeposit}
                 userDeposit={userDeposit}
                 isLoading={actionLoading}
+                depositDisabled={isDelegated === true}
               />
             )}
 
             {/* Action buttons based on status */}
             <div className="flex flex-col gap-3">
-              {/* Created + seller: Start Auction */}
+              {/* Created + seller: Start Auction + Delegate */}
               {isCreated && isSeller && (
                 <button
-                  onClick={handleStartAuction}
+                  onClick={async () => {
+                    setActionLoading(true);
+                    try {
+                      // Start auction then delegate in sequence
+                      await actions.startAuction(new PublicKey(id), auction.nftMint);
+                      addToast("Auction started! Delegating to ER...", "success");
+                      // Small delay for L1 confirmation
+                      await new Promise((r) => setTimeout(r, 2000));
+                      await actions.delegateAuction(new PublicKey(id), auction.nftMint);
+                      addToast("Delegated to Ephemeral Rollup — live bidding enabled!", "success");
+                      await refetch();
+                    } catch (err: unknown) {
+                      const msg = err instanceof Error ? err.message : "Failed to start";
+                      addToast(msg, "error");
+                    } finally {
+                      setActionLoading(false);
+                    }
+                  }}
                   disabled={actionLoading}
                   className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {actionLoading ? (
-                    <Spinner />
-                  ) : (
-                    "Start Auction"
-                  )}
+                  {actionLoading ? <Spinner /> : "Start Auction"}
                 </button>
               )}
 
@@ -477,10 +578,46 @@ export default function AuctionRoomPage({
                 />
               )}
 
-              {/* Ended: Settle Auction (permissionless) */}
+              {/* Active + seller + not delegated: Manual delegate fallback */}
+              {isActive && isSeller && isDelegated === false && (
+                <button
+                  onClick={handleDelegateAuction}
+                  disabled={actionLoading}
+                  className="flex h-12 w-full items-center justify-center rounded-md border border-gold/40 text-sm font-medium tracking-[0.15em] text-gold uppercase transition-all duration-200 hover:border-gold hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {actionLoading ? <Spinner /> : "Delegate to ER"}
+                </button>
+              )}
+
+              {/* Ended: Undelegate + Settle */}
               {isEnded && (
                 <button
-                  onClick={handleSettleAuction}
+                  onClick={async () => {
+                    setActionLoading(true);
+                    try {
+                      // Try to undelegate first (if delegated), then settle
+                      try {
+                        await actions.undelegateAuction(new PublicKey(id));
+                        addToast("Undelegated from ER. Settling...", "success");
+                        await new Promise((r) => setTimeout(r, 3000));
+                      } catch {
+                        // May not be delegated — continue to settle
+                      }
+                      await actions.settleAuction(
+                        new PublicKey(id),
+                        auction.nftMint,
+                        auction.seller,
+                        auction.highestBidder
+                      );
+                      addToast("Auction settled!", "success");
+                      await refetch();
+                    } catch (err: unknown) {
+                      const msg = err instanceof Error ? err.message : "Settlement failed";
+                      addToast(msg, "error");
+                    } finally {
+                      setActionLoading(false);
+                    }
+                  }}
                   disabled={actionLoading}
                   className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -511,6 +648,24 @@ export default function AuctionRoomPage({
         </div>
       </motion.div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BidderName — resolves Tapestry username, falls back to truncated address
+// ---------------------------------------------------------------------------
+
+function BidderName({ wallet }: { wallet: string }) {
+  const { profile } = useTapestryProfile(wallet);
+  const display = profile?.profile.username || truncateAddress(wallet);
+
+  return (
+    <a
+      href={`/profile/${wallet}`}
+      className="text-[11px] font-medium text-gold/70 transition-colors hover:text-gold"
+    >
+      {display}
+    </a>
   );
 }
 

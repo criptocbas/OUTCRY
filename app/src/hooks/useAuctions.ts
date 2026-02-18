@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useConnection, useAnchorWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useAnchorWallet } from "@solana/wallet-adapter-react";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { getProgram } from "@/lib/program";
+import { getMagicConnection } from "@/lib/magic-router";
+import { DEVNET_RPC } from "@/lib/constants";
 import type { AuctionAccount, AuctionStatusLabel } from "./useAuction";
 import { parseAuctionStatus } from "./useAuction";
 
@@ -46,7 +48,10 @@ function sortAuctions(a: AuctionWithKey, b: AuctionWithKey): number {
 // ---------------------------------------------------------------------------
 
 export function useAuctions(): UseAuctionsReturn {
-  const { connection } = useConnection();
+  // Standard devnet for getProgramAccounts (listing) — Magic Router doesn't support it
+  const l1Connection = useMemo(() => new Connection(DEVNET_RPC, "confirmed"), []);
+  // Magic Router for individual account fetches (sees ER-delegated state)
+  const magicConnection = useMemo(() => getMagicConnection(), []);
   const wallet = useAnchorWallet();
 
   const [auctions, setAuctions] = useState<AuctionWithKey[]>([]);
@@ -63,15 +68,32 @@ export function useAuctions(): UseAuctionsReturn {
     setError(null);
 
     try {
-      const program = getProgram(connection, wallet);
+      // Step 1: Get all auction account keys from L1
+      const l1Program = getProgram(l1Connection, wallet);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const accounts = await (program.account as any).auctionState.all();
+      const l1Accounts = await (l1Program.account as any).auctionState.all();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mapped: AuctionWithKey[] = accounts.map((item: any) => ({
-        publicKey: item.publicKey,
-        account: item.account as unknown as AuctionAccount,
-      }));
+      // Step 2: Re-fetch each account via Magic Router to get latest state
+      // (delegated accounts will return ER state, others return L1 state)
+      const magicProgram = getProgram(magicConnection, wallet);
+      const mapped: AuctionWithKey[] = await Promise.all(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        l1Accounts.map(async (item: any) => {
+          try {
+            const fresh = await (magicProgram.account as Record<string, { fetch: (key: PublicKey) => Promise<unknown> }>)["auctionState"].fetch(item.publicKey);
+            return {
+              publicKey: item.publicKey,
+              account: fresh as unknown as AuctionAccount,
+            };
+          } catch {
+            // Fallback to L1 data if Magic Router fetch fails
+            return {
+              publicKey: item.publicKey,
+              account: item.account as unknown as AuctionAccount,
+            };
+          }
+        })
+      );
 
       mapped.sort(sortAuctions);
 
@@ -84,7 +106,7 @@ export function useAuctions(): UseAuctionsReturn {
     } finally {
       setLoading(false);
     }
-  }, [wallet, connection]);
+  }, [wallet, l1Connection, magicConnection]);
 
   // Initial fetch
   useEffect(() => {

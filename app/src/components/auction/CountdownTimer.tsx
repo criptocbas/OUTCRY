@@ -26,6 +26,24 @@ export default function CountdownTimer({ endTime, status }: CountdownTimerProps)
   }, [endTime, status]);
 
   if (status !== "active" || timeLeft <= 0) {
+    const statusLabel =
+      status === "created"
+        ? "AWAITING START"
+        : status === "settled"
+          ? "SETTLED"
+          : status === "cancelled"
+            ? "CANCELLED"
+            : "ENDED";
+
+    const statusColor =
+      status === "created"
+        ? "text-[#F5F0E8]/60"
+        : status === "settled"
+          ? "text-emerald-400"
+          : status === "cancelled"
+            ? "text-red-400/70"
+            : "text-[#C6A961]";
+
     return (
       <div className="flex flex-col items-center">
         <span
@@ -35,10 +53,10 @@ export default function CountdownTimer({ endTime, status }: CountdownTimerProps)
           Auction Status
         </span>
         <span
-          className="text-2xl font-bold tracking-wider text-[#C6A961]"
+          className={`text-2xl font-bold tracking-wider ${statusColor}`}
           style={{ fontFamily: "'Playfair Display', serif" }}
         >
-          ENDED
+          {statusLabel}
         </span>
       </div>
     );

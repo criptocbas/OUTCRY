@@ -87,7 +87,16 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(body || `Tapestry API error: ${res.status}`);
+    let message = `Tapestry API error: ${res.status}`;
+    if (body) {
+      try {
+        const parsed = JSON.parse(body);
+        message = parsed.error || parsed.message || message;
+      } catch {
+        message = body;
+      }
+    }
+    throw new Error(message);
   }
   return res.json();
 }
