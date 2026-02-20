@@ -11,6 +11,82 @@ use crate::{
     state::{AuctionState, AuctionStatus, AuctionVault, BidderDeposit},
 };
 
+/// Metaplex Token Metadata program ID (for cross-program PDA validation)
+pub mod token_metadata_program {
+    anchor_lang::declare_id!("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+}
+
+/// Parsed creator from Metaplex metadata
+struct MetaplexCreator {
+    address: Pubkey,
+    share: u8,
+}
+
+/// Parse seller_fee_basis_points and creators from raw Metaplex metadata account data.
+///
+/// Binary layout (Borsh-serialized):
+///   key(1) + update_authority(32) + mint(32) = 65 bytes header
+///   name: String(4-byte len + bytes)
+///   symbol: String(4-byte len + bytes)
+///   uri: String(4-byte len + bytes)
+///   seller_fee_basis_points: u16
+///   creators: Option<Vec<Creator>>
+///     Creator = address(32) + verified(1) + share(1)
+fn parse_metadata_royalties(data: &[u8]) -> Result<(u16, Vec<MetaplexCreator>)> {
+    let mut offset: usize = 65; // skip key + update_authority + mint
+
+    // Skip 3 Borsh strings: name, symbol, uri
+    for _ in 0..3 {
+        require!(offset + 4 <= data.len(), OutcryError::InvalidMetadata);
+        let len = u32::from_le_bytes(
+            data[offset..offset + 4]
+                .try_into()
+                .map_err(|_| error!(OutcryError::InvalidMetadata))?,
+        ) as usize;
+        offset += 4 + len;
+    }
+
+    // Read seller_fee_basis_points (u16, little-endian)
+    require!(offset + 2 <= data.len(), OutcryError::InvalidMetadata);
+    let seller_fee_bps = u16::from_le_bytes(
+        data[offset..offset + 2]
+            .try_into()
+            .map_err(|_| error!(OutcryError::InvalidMetadata))?,
+    );
+    offset += 2;
+
+    // Read Option<Vec<Creator>>
+    require!(offset + 1 <= data.len(), OutcryError::InvalidMetadata);
+    let has_creators = data[offset] == 1;
+    offset += 1;
+
+    let mut creators = Vec::new();
+    if has_creators {
+        require!(offset + 4 <= data.len(), OutcryError::InvalidMetadata);
+        let count = u32::from_le_bytes(
+            data[offset..offset + 4]
+                .try_into()
+                .map_err(|_| error!(OutcryError::InvalidMetadata))?,
+        ) as usize;
+        offset += 4;
+
+        for _ in 0..count {
+            require!(offset + 34 <= data.len(), OutcryError::InvalidMetadata);
+            let address = Pubkey::try_from(&data[offset..offset + 32])
+                .map_err(|_| error!(OutcryError::InvalidMetadata))?;
+            // Skip verified flag (offset + 32) — we pay all listed creators
+            let share = data[offset + 33];
+            offset += 34;
+
+            if share > 0 {
+                creators.push(MetaplexCreator { address, share });
+            }
+        }
+    }
+
+    Ok((seller_fee_bps, creators))
+}
+
 #[derive(Accounts)]
 pub struct SettleAuction<'info> {
     /// Anyone can crank settlement — permissionless
@@ -57,6 +133,19 @@ pub struct SettleAuction<'info> {
 
     pub nft_mint: Account<'info, Mint>,
 
+    /// CHECK: Metaplex Token Metadata PDA — validated via cross-program seeds derivation.
+    /// Parsed for seller_fee_basis_points and creators to enforce royalty distribution.
+    #[account(
+        seeds = [
+            b"metadata",
+            token_metadata_program::ID.as_ref(),
+            nft_mint.key().as_ref(),
+        ],
+        bump,
+        seeds::program = token_metadata_program::ID,
+    )]
+    pub nft_metadata: UncheckedAccount<'info>,
+
     #[account(
         mut,
         associated_token::mint = nft_mint,
@@ -94,11 +183,54 @@ pub fn handle_settle_auction(ctx: Context<SettleAuction>) -> Result<()> {
         .checked_sub(winning_bid)
         .ok_or(OutcryError::ArithmeticOverflow)?;
 
-    // --- Distribute SOL from vault to seller ---
-    // TODO: Add royalty distribution from Metaplex metadata once toolchain supports it.
-    //       For now, full winning bid goes to seller.
-    let seller_receives = winning_bid;
-    let royalties_paid: u64 = 0;
+    // --- Parse royalty info from Metaplex metadata ---
+    let metadata_data = ctx.accounts.nft_metadata.try_borrow_data()?;
+    let (seller_fee_bps, creators) = parse_metadata_royalties(&metadata_data)?;
+    drop(metadata_data); // Release borrow before lamport transfers
+
+    // Calculate total royalties
+    let total_royalties = (winning_bid as u128)
+        .checked_mul(seller_fee_bps as u128)
+        .ok_or(OutcryError::ArithmeticOverflow)?
+        .checked_div(10_000)
+        .ok_or(OutcryError::ArithmeticOverflow)? as u64;
+
+    // --- Distribute royalties to creators via remaining_accounts ---
+    let mut distributed_royalties: u64 = 0;
+
+    if total_royalties > 0 && !creators.is_empty() {
+        require!(
+            ctx.remaining_accounts.len() >= creators.len(),
+            OutcryError::MissingCreatorAccount
+        );
+
+        let vault_info = ctx.accounts.auction_vault.to_account_info();
+
+        for (i, creator) in creators.iter().enumerate() {
+            let creator_account = &ctx.remaining_accounts[i];
+            require!(
+                creator_account.key() == creator.address,
+                OutcryError::MissingCreatorAccount
+            );
+
+            let creator_royalty = (total_royalties as u128)
+                .checked_mul(creator.share as u128)
+                .ok_or(OutcryError::ArithmeticOverflow)?
+                .checked_div(100)
+                .ok_or(OutcryError::ArithmeticOverflow)? as u64;
+
+            if creator_royalty > 0 {
+                **vault_info.try_borrow_mut_lamports()? -= creator_royalty;
+                **creator_account.try_borrow_mut_lamports()? += creator_royalty;
+                distributed_royalties += creator_royalty;
+            }
+        }
+    }
+
+    // --- Send remainder to seller (winning bid minus royalties) ---
+    let seller_receives = winning_bid
+        .checked_sub(distributed_royalties)
+        .ok_or(OutcryError::ArithmeticOverflow)?;
 
     let vault_info = ctx.accounts.auction_vault.to_account_info();
     let seller_info = ctx.accounts.seller.to_account_info();
@@ -138,7 +270,7 @@ pub fn handle_settle_auction(ctx: Context<SettleAuction>) -> Result<()> {
         winner: winner_key,
         final_price: winning_bid,
         seller_received: seller_receives,
-        royalties_paid,
+        royalties_paid: distributed_royalties,
     });
 
     Ok(())

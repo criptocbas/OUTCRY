@@ -18,8 +18,10 @@ import LikeButton from "@/components/social/LikeButton";
 import CommentSection from "@/components/social/CommentSection";
 import { truncateAddress, formatSOL } from "@/lib/utils";
 import { useTapestryProfile } from "@/hooks/useTapestryProfile";
+import { useNftMetadata } from "@/hooks/useNftMetadata";
 import { getProfile, createContent } from "@/lib/tapestry";
 import { DELEGATION_PROGRAM_ID, DEVNET_RPC } from "@/lib/constants";
+import NftImage from "@/components/auction/NftImage";
 
 // ---------------------------------------------------------------------------
 // Toast notification
@@ -61,18 +63,6 @@ function ToastNotification({
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function seedHue(address: string): number {
-  let hash = 0;
-  for (let i = 0; i < address.length; i++) {
-    hash = address.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return Math.abs(hash) % 360;
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -88,6 +78,10 @@ export default function AuctionRoomPage({
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
+  const [bidFlash, setBidFlash] = useState(false);
+  const [prevBid, setPrevBid] = useState<number | null>(null);
+  const [prevHighestBidder, setPrevHighestBidder] = useState<string | null>(null);
 
   const addToast = useCallback(
     (message: string, type: "success" | "error") => {
@@ -100,6 +94,31 @@ export default function AuctionRoomPage({
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Detect bid changes for flash animation + outbid notification
+  useEffect(() => {
+    if (!auction) return;
+    const currentBid = auction.currentBid.toNumber();
+    const currentBidder = auction.highestBidder?.toBase58() ?? null;
+
+    if (prevBid !== null && currentBid > prevBid) {
+      // New bid arrived — trigger flash
+      setBidFlash(true);
+      setTimeout(() => setBidFlash(false), 800);
+
+      // Check if user was outbid
+      if (
+        publicKey &&
+        prevHighestBidder === publicKey.toBase58() &&
+        currentBidder !== publicKey.toBase58()
+      ) {
+        addToast("You've been outbid!", "error");
+      }
+    }
+
+    setPrevBid(currentBid);
+    setPrevHighestBidder(currentBidder);
+  }, [auction?.currentBid?.toString(), auction?.highestBidder?.toBase58()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check ER delegation status
   const l1Connection = useMemo(() => new Connection(DEVNET_RPC, "confirmed"), []);
@@ -146,75 +165,126 @@ export default function AuctionRoomPage({
   );
   const userDeposit = bidderDepositAccount?.amount?.toNumber() ?? null;
 
-  // Action handlers
-  const handleDeposit = useCallback(
-    async (lamports: number) => {
-      if (!auction) return;
-      setActionLoading(true);
-      try {
-        await actions.deposit(new PublicKey(id), new BN(lamports));
-        addToast("Deposit successful", "success");
-        await Promise.all([refetch(), refetchDeposit()]);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Deposit failed";
-        addToast(msg, "error");
-      } finally {
-        setActionLoading(false);
-      }
-    },
-    [auction, actions, id, addToast, refetch, refetchDeposit]
-  );
-
+  // -------------------------------------------------------------------------
+  // Smart bid handler: auto-deposits if needed, then places bid
+  // -------------------------------------------------------------------------
   const handleBid = useCallback(
-    async (lamports: number) => {
+    async (bidLamports: number) => {
       if (!auction) return;
       setActionLoading(true);
+      setProgressLabel(null);
+
       try {
-        await actions.placeBid(new PublicKey(id), new BN(lamports));
-        addToast("Bid placed!", "success");
+        const currentDeposit = bidderDepositAccount?.amount?.toNumber() ?? 0;
+        const depositNeeded = Math.max(0, bidLamports - currentDeposit);
+
+        // Step 1: Auto-deposit if needed
+        if (depositNeeded > 0) {
+          setProgressLabel("Depositing SOL...");
+          await actions.deposit(new PublicKey(id), new BN(depositNeeded));
+          addToast(`Deposited ${formatSOL(depositNeeded)} SOL`, "success");
+          // Brief pause for L1 confirmation
+          await new Promise((r) => setTimeout(r, 1500));
+          await refetchDeposit();
+        }
+
+        // Step 2: Place bid
+        setProgressLabel("Placing bid...");
+        await actions.placeBid(new PublicKey(id), new BN(bidLamports));
+        addToast(`Bid placed: ${formatSOL(bidLamports)} SOL`, "success");
         await refetch();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Bid failed";
         addToast(msg, "error");
       } finally {
         setActionLoading(false);
+        setProgressLabel(null);
       }
     },
-    [auction, actions, id, addToast, refetch]
+    [auction, actions, id, addToast, refetch, refetchDeposit, bidderDepositAccount]
   );
 
-  const handleStartAuction = useCallback(async () => {
+  // -------------------------------------------------------------------------
+  // Go Live: Start + Delegate in one click
+  // -------------------------------------------------------------------------
+  const handleGoLive = useCallback(async () => {
     if (!auction) return;
     setActionLoading(true);
+    setProgressLabel(null);
+
     try {
-      await actions.startAuction(
-        new PublicKey(id),
-        auction.nftMint
-      );
-      addToast("Auction started!", "success");
+      // Step 1: Start auction (if still Created)
+      if (isCreated) {
+        setProgressLabel("Starting auction...");
+        await actions.startAuction(new PublicKey(id), auction.nftMint);
+        addToast("Auction started!", "success");
+        await new Promise((r) => setTimeout(r, 2000));
+        await refetch();
+      }
+
+      // Step 2: Delegate to ER
+      setProgressLabel("Delegating to Ephemeral Rollup...");
+      await actions.delegateAuction(new PublicKey(id), auction.nftMint);
+      addToast("Live on Ephemeral Rollup!", "success");
       await refetch();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to start";
+      const msg = err instanceof Error ? err.message : "Failed to go live";
       addToast(msg, "error");
     } finally {
       setActionLoading(false);
+      setProgressLabel(null);
     }
-  }, [auction, actions, id, addToast, refetch]);
+  }, [auction, actions, id, addToast, refetch, isCreated]);
 
-  const handleSettleAuction = useCallback(async () => {
+  // -------------------------------------------------------------------------
+  // Settle: Undelegate (if needed) + Settle in one click
+  // -------------------------------------------------------------------------
+  const handleSettle = useCallback(async () => {
     if (!auction) return;
     setActionLoading(true);
+    setProgressLabel(null);
+
     try {
-      await actions.settleAuction(
-        new PublicKey(id),
-        auction.nftMint,
-        auction.seller,
-        auction.highestBidder
-      );
-      addToast("Auction settled!", "success");
+      // Try to undelegate first (if delegated)
+      if (isDelegated) {
+        setProgressLabel("Returning state to L1...");
+        try {
+          await actions.undelegateAuction(new PublicKey(id));
+          addToast("Undelegated from ER", "success");
+          await new Promise((r) => setTimeout(r, 3000));
+        } catch {
+          // May not be delegated — continue to settle
+        }
+      }
+
+      setProgressLabel("Settling auction...");
+      try {
+        await actions.settleAuction(
+          new PublicKey(id),
+          auction.nftMint,
+          auction.seller,
+          auction.highestBidder
+        );
+        addToast("Auction settled!", "success");
+      } catch (settleErr: unknown) {
+        // If settlement failed (likely insufficient deposit), try forfeit
+        const settleMsg = settleErr instanceof Error ? settleErr.message : "";
+        if (settleMsg.includes("InsufficientDeposit") || settleMsg.includes("0x1776")) {
+          setProgressLabel("Winner defaulted — forfeiting auction...");
+          await actions.forfeitAuction(
+            new PublicKey(id),
+            auction.nftMint,
+            auction.seller,
+            auction.highestBidder
+          );
+          addToast("Auction forfeited — NFT returned to seller, winner deposit slashed", "success");
+        } else {
+          throw settleErr;
+        }
+      }
       await refetch();
 
-      // Post auction result to Tapestry (best-effort, don't block on failure)
+      // Post auction result to Tapestry (best-effort)
       if (publicKey) {
         const winnerAddr = auction.highestBidder?.toBase58() ?? "unknown";
         const winBid = formatSOL(auction.currentBid.toNumber());
@@ -232,68 +302,34 @@ export default function AuctionRoomPage({
               });
             }
           })
-          .catch(() => {
-            // Silently ignore — social posting is best-effort
-          });
+          .catch(() => {});
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Settlement failed";
       addToast(msg, "error");
     } finally {
       setActionLoading(false);
+      setProgressLabel(null);
     }
-  }, [auction, actions, id, addToast, refetch, publicKey]);
+  }, [auction, actions, id, addToast, refetch, publicKey, isDelegated]);
 
-  const handleDelegateAuction = useCallback(async () => {
-    if (!auction) return;
-    setActionLoading(true);
-    try {
-      await actions.delegateAuction(
-        new PublicKey(id),
-        auction.nftMint
-      );
-      addToast("Auction delegated to Ephemeral Rollup!", "success");
-      await refetch();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Delegation failed";
-      addToast(msg, "error");
-    } finally {
-      setActionLoading(false);
-    }
-  }, [auction, actions, id, addToast, refetch]);
-
-  const handleUndelegateAuction = useCallback(async () => {
-    if (!auction) return;
-    setActionLoading(true);
-    try {
-      await actions.undelegateAuction(new PublicKey(id));
-      addToast("Auction undelegated back to L1!", "success");
-      await refetch();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Undelegation failed";
-      addToast(msg, "error");
-    } finally {
-      setActionLoading(false);
-    }
-  }, [auction, actions, id, addToast, refetch]);
-
+  // -------------------------------------------------------------------------
+  // Claim refund
+  // -------------------------------------------------------------------------
   const handleClaimRefund = useCallback(async () => {
     if (!auction) return;
     setActionLoading(true);
     try {
       await actions.claimRefund(new PublicKey(id));
       addToast("Refund claimed!", "success");
-      await refetch();
+      await Promise.all([refetch(), refetchDeposit()]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Refund failed";
       addToast(msg, "error");
     } finally {
       setActionLoading(false);
     }
-  }, [auction, actions, id, addToast, refetch]);
-
-  // Hue for artwork placeholder
-  const hue = seedHue(id);
+  }, [auction, actions, id, addToast, refetch, refetchDeposit]);
 
   // Bid history — currently shows current bid as latest entry.
   // Real bid history would come from transaction logs / events.
@@ -375,25 +411,15 @@ export default function AuctionRoomPage({
             className="flex-1 lg:max-w-[60%]"
           >
             {/* Artwork display */}
-            <div
-              className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl"
-              style={{
-                background: `linear-gradient(135deg, hsl(${hue}, 15%, 8%) 0%, hsl(${(hue + 40) % 360}, 20%, 12%) 50%, hsl(${(hue + 80) % 360}, 10%, 6%) 100%)`,
-              }}
-            >
-              {/* Grid overlay */}
-              <div
-                className="absolute inset-0 opacity-[0.03]"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(rgba(198,169,97,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(198,169,97,0.5) 1px, transparent 1px)",
-                  backgroundSize: "60px 60px",
-                }}
+            <div className="relative aspect-square w-full overflow-hidden rounded-xl">
+              <NftImage
+                mintAddress={auction.nftMint.toBase58()}
+                className="absolute inset-0 h-full w-full rounded-xl"
               />
-              <span className="font-serif text-lg italic text-cream/10">
-                NFT ARTWORK
-              </span>
             </div>
+
+            {/* NFT Title */}
+            <NftTitle mintAddress={auction.nftMint.toBase58()} />
 
             {/* Seller + NFT info */}
             <div className="mt-6 flex flex-col gap-4 border-t border-charcoal-light pt-6">
@@ -490,19 +516,29 @@ export default function AuctionRoomPage({
               />
             </div>
 
-            {/* Current bid display */}
-            <div className="flex flex-col items-center rounded-lg border border-charcoal-light bg-charcoal px-6 py-5">
+            {/* Current bid display — with flash animation */}
+            <div
+              className={`flex flex-col items-center rounded-lg border border-charcoal-light bg-charcoal px-6 py-5 transition-all duration-300 ${
+                bidFlash ? "border-gold/60 shadow-[0_0_20px_rgba(198,169,97,0.15)]" : ""
+              }`}
+            >
               <span className="mb-1 text-[10px] tracking-[0.25em] text-cream/40 uppercase">
                 {auction.currentBid.toNumber() > 0
                   ? "Current Bid"
                   : "Reserve Price"}
               </span>
               <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-bold tabular-nums text-gold">
+                <motion.span
+                  key={auction.currentBid.toString()}
+                  initial={prevBid !== null ? { scale: 1.15, color: "#D4B872" } : false}
+                  animate={{ scale: 1, color: "#C6A961" }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="text-4xl font-bold tabular-nums text-gold"
+                >
                   {auction.currentBid.toNumber() > 0
                     ? formatSOL(auction.currentBid.toNumber())
                     : formatSOL(auction.reservePrice.toNumber())}
-                </span>
+                </motion.span>
                 <span className="text-sm font-medium text-gold/50 uppercase">
                   SOL
                 </span>
@@ -517,8 +553,8 @@ export default function AuctionRoomPage({
                 )}
             </div>
 
-            {/* Bid Panel (during Created or Active) */}
-            {(isActive || isCreated) && (
+            {/* Bid Panel — unified deposit+bid flow (during Active) */}
+            {isActive && !isSeller && (
               <BidPanel
                 auctionState={{
                   currentBid: auction.currentBid.toNumber(),
@@ -527,81 +563,138 @@ export default function AuctionRoomPage({
                   reservePrice: auction.reservePrice.toNumber(),
                 }}
                 onBid={handleBid}
-                onDeposit={handleDeposit}
                 userDeposit={userDeposit}
                 isLoading={actionLoading}
-                isSeller={isSeller}
+                isSeller={false}
+                progressLabel={progressLabel}
               />
             )}
 
-            {/* Action buttons based on status */}
+            {/* Seller cannot bid message during active */}
+            {isActive && isSeller && (
+              <div className="rounded-lg border border-charcoal-light bg-charcoal p-5">
+                <p className="text-center text-xs text-cream/40">
+                  You are the seller — you cannot bid on your own auction.
+                </p>
+              </div>
+            )}
+
+            {/* Action buttons */}
             <div className="flex flex-col gap-3">
-              {/* Created + seller: Start Auction (L1 only — don't auto-delegate) */}
+              {/* Created + seller: Go Live (Start + Delegate in one click) */}
               {isCreated && isSeller && (
-                <button
-                  onClick={handleStartAuction}
-                  disabled={actionLoading}
-                  className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {actionLoading ? <Spinner /> : "Start Auction"}
-                </button>
-              )}
-
-              {/* Created + not seller: BidPanel already shown above */}
-
-              {/* Active + seller + not delegated: Go live on ER */}
-              {isActive && isSeller && isDelegated === false && (
                 <div className="flex flex-col gap-2">
                   <button
-                    onClick={handleDelegateAuction}
+                    onClick={handleGoLive}
                     disabled={actionLoading}
-                    className="flex h-12 w-full items-center justify-center rounded-md bg-emerald-600 text-sm font-semibold tracking-[0.15em] text-white uppercase transition-all duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {actionLoading ? <Spinner /> : "Go Live on ER"}
+                    {actionLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Spinner />
+                        {progressLabel && (
+                          <span className="text-xs font-medium normal-case tracking-normal">
+                            {progressLabel}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      "Go Live"
+                    )}
                   </button>
                   <p className="text-center text-[10px] text-cream/25">
-                    Delegates to Ephemeral Rollup for sub-50ms bidding. Deposits still work after this.
+                    Starts the auction and delegates to Ephemeral Rollup for sub-50ms bidding
                   </p>
                 </div>
               )}
 
-              {/* Ended: Undelegate + Settle */}
+              {/* Active + seller + not delegated: just delegate (start already happened) */}
+              {isActive && isSeller && isDelegated === false && (
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={handleGoLive}
+                    disabled={actionLoading}
+                    className="flex h-12 w-full items-center justify-center rounded-md bg-emerald-600 text-sm font-semibold tracking-[0.15em] text-white uppercase transition-all duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {actionLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Spinner />
+                        {progressLabel && (
+                          <span className="text-xs font-medium normal-case tracking-normal">
+                            {progressLabel}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      "Go Live on ER"
+                    )}
+                  </button>
+                  <p className="text-center text-[10px] text-cream/25">
+                    Delegates to Ephemeral Rollup for sub-50ms bidding
+                  </p>
+                </div>
+              )}
+
+              {/* Created + not seller: prompt to deposit for upcoming auction */}
+              {isCreated && !isSeller && (
+                <div className="rounded-lg border border-charcoal-light bg-charcoal p-5">
+                  <p className="text-center text-xs text-cream/40">
+                    This auction hasn&apos;t started yet. You can deposit SOL ahead of time to be ready when bidding opens.
+                  </p>
+                  <BidPanel
+                    auctionState={{
+                      currentBid: 0,
+                      highestBidder: null,
+                      status: auction.status,
+                      reservePrice: auction.reservePrice.toNumber(),
+                    }}
+                    onBid={async (lamports) => {
+                      // Pre-auction: just deposit, don't bid
+                      setActionLoading(true);
+                      setProgressLabel("Depositing SOL...");
+                      try {
+                        await actions.deposit(new PublicKey(id), new BN(lamports));
+                        addToast(`Deposited ${formatSOL(lamports)} SOL`, "success");
+                        await refetchDeposit();
+                      } catch (err: unknown) {
+                        const msg = err instanceof Error ? err.message : "Deposit failed";
+                        addToast(msg, "error");
+                      } finally {
+                        setActionLoading(false);
+                        setProgressLabel(null);
+                      }
+                    }}
+                    userDeposit={userDeposit}
+                    isLoading={actionLoading}
+                    isSeller={false}
+                    progressLabel={progressLabel}
+                  />
+                </div>
+              )}
+
+              {/* Ended: Settle */}
               {isEnded && (
                 <button
-                  onClick={async () => {
-                    setActionLoading(true);
-                    try {
-                      // Try to undelegate first (if delegated), then settle
-                      try {
-                        await actions.undelegateAuction(new PublicKey(id));
-                        addToast("Undelegated from ER. Settling...", "success");
-                        await new Promise((r) => setTimeout(r, 3000));
-                      } catch {
-                        // May not be delegated — continue to settle
-                      }
-                      await actions.settleAuction(
-                        new PublicKey(id),
-                        auction.nftMint,
-                        auction.seller,
-                        auction.highestBidder
-                      );
-                      addToast("Auction settled!", "success");
-                      await refetch();
-                    } catch (err: unknown) {
-                      const msg = err instanceof Error ? err.message : "Settlement failed";
-                      addToast(msg, "error");
-                    } finally {
-                      setActionLoading(false);
-                    }
-                  }}
+                  onClick={handleSettle}
                   disabled={actionLoading}
                   className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {actionLoading ? <Spinner /> : "Settle Auction"}
+                  {actionLoading ? (
+                    <div className="flex items-center gap-2">
+                      <Spinner />
+                      {progressLabel && (
+                        <span className="text-xs font-medium normal-case tracking-normal">
+                          {progressLabel}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    "Settle Auction"
+                  )}
                 </button>
               )}
 
-              {/* Settled or Cancelled: Claim Refund (for bidders with deposits) */}
+              {/* Settled or Cancelled: Claim Refund */}
               {(isSettled || isCancelled) && userDeposit && userDeposit > 0 && (
                 <button
                   onClick={handleClaimRefund}
@@ -624,6 +717,21 @@ export default function AuctionRoomPage({
         </div>
       </motion.div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NftTitle — resolves NFT name from metadata
+// ---------------------------------------------------------------------------
+
+function NftTitle({ mintAddress }: { mintAddress: string }) {
+  const { metadata } = useNftMetadata(mintAddress);
+  if (!metadata?.name) return null;
+
+  return (
+    <h1 className="mt-4 font-serif text-2xl font-semibold italic text-cream sm:text-3xl">
+      {metadata.name}
+    </h1>
   );
 }
 

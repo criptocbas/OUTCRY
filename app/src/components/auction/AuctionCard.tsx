@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import AuctionStatus from "./AuctionStatus";
 import CountdownTimer from "./CountdownTimer";
+import NftImage from "./NftImage";
 
 interface AuctionStatus_t {
   created?: Record<string, never>;
@@ -36,25 +37,12 @@ function getStatusKey(status: AuctionStatus_t): string {
   return "created";
 }
 
-/**
- * Generate a deterministic hue from a public key string
- * to give each card a subtly unique gradient.
- */
-function seedHue(address: string): number {
-  let hash = 0;
-  for (let i = 0; i < address.length; i++) {
-    hash = address.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return Math.abs(hash) % 360;
-}
-
 function formatSol(lamports: number): string {
   return (lamports / 1_000_000_000).toFixed(2);
 }
 
 export default function AuctionCard({ auction }: AuctionCardProps) {
   const statusKey = getStatusKey(auction.status);
-  const hue = seedHue(auction.publicKey);
 
   const displayBid =
     auction.currentBid > 0 ? auction.currentBid : auction.reservePrice;
@@ -67,21 +55,15 @@ export default function AuctionCard({ auction }: AuctionCardProps) {
         transition={{ duration: 0.25, ease: "easeOut" }}
         className="group cursor-pointer overflow-hidden rounded-lg border border-[#2A2A2A] bg-[#1A1A1A] transition-all duration-300 hover:border-[#C6A961]/40 hover:shadow-[0_0_20px_rgba(198,169,97,0.08)]"
       >
-        {/* Artwork placeholder */}
-        <div
-          className="relative aspect-square w-full"
-          style={{
-            background: `linear-gradient(135deg, hsl(${hue}, 15%, 8%) 0%, hsl(${(hue + 40) % 360}, 20%, 12%) 50%, hsl(${(hue + 80) % 360}, 10%, 6%) 100%)`,
-          }}
-        >
-          {/* Subtle grid overlay */}
-          <div className="absolute inset-0 opacity-[0.03]" style={{
-            backgroundImage: "linear-gradient(rgba(198,169,97,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(198,169,97,0.5) 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
-          }} />
-
+        {/* NFT Artwork */}
+        <div className="relative aspect-square w-full">
+          <NftImage
+            mintAddress={auction.nftMint}
+            className="absolute inset-0 h-full w-full"
+            showName
+          />
           {/* Status badge overlay */}
-          <div className="absolute top-3 left-3">
+          <div className="absolute top-3 left-3 z-10">
             <AuctionStatus status={auction.status} />
           </div>
         </div>

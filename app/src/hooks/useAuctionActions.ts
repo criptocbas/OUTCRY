@@ -12,7 +12,7 @@ import {
   getAssociatedTokenAddress,
 } from "@solana/spl-token";
 import BN from "bn.js";
-import { getProgram, getAuctionPDA, getVaultPDA, getDepositPDA } from "@/lib/program";
+import { getProgram, getAuctionPDA, getVaultPDA, getDepositPDA, getMetadataPDA, parseMetadataCreators } from "@/lib/program";
 import { getMagicConnection } from "@/lib/magic-router";
 import { PROGRAM_ID, DELEGATION_PROGRAM_ID, DEVNET_RPC } from "@/lib/constants";
 
@@ -61,6 +61,14 @@ export interface UseAuctionActionsReturn {
 
   /** Claim a refund of deposited SOL (losers, after settlement/cancellation). */
   claimRefund: (auctionStatePubkey: PublicKey) => Promise<string>;
+
+  /** Forfeit a defaulted auction — winner didn't deposit enough. Returns NFT to seller. */
+  forfeitAuction: (
+    auctionStatePubkey: PublicKey,
+    nftMint: PublicKey,
+    seller: PublicKey,
+    winner: PublicKey
+  ) => Promise<string>;
 
   /** True when the wallet is connected and actions are available. */
   ready: boolean;
@@ -431,6 +439,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
 
       const [auctionVault] = getVaultPDA(auctionStatePubkey);
       const [winnerDeposit] = getDepositPDA(auctionStatePubkey, winner);
+      const [nftMetadata] = getMetadataPDA(nftMint);
 
       const escrowNftTokenAccount = await getAssociatedTokenAddress(
         nftMint,
@@ -443,6 +452,25 @@ export function useAuctionActions(): UseAuctionActionsReturn {
         winner
       );
 
+      // Fetch metadata account to get creator list for remaining_accounts
+      const metadataAccountInfo = await l1Connection.getAccountInfo(nftMetadata);
+      const remainingAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
+
+      if (metadataAccountInfo?.data) {
+        const parsed = parseMetadataCreators(metadataAccountInfo.data);
+        if (parsed && parsed.sellerFeeBps > 0 && parsed.creators.length > 0) {
+          for (const creator of parsed.creators) {
+            if (creator.share > 0) {
+              remainingAccounts.push({
+                pubkey: creator.address,
+                isSigner: false,
+                isWritable: true,
+              });
+            }
+          }
+        }
+      }
+
       const sig = await l1Program.methods
         .settleAuction()
         .accounts({
@@ -453,17 +481,19 @@ export function useAuctionActions(): UseAuctionActionsReturn {
           seller,
           winner,
           nftMint,
+          nftMetadata,
           escrowNftTokenAccount,
           winnerNftTokenAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
+        .remainingAccounts(remainingAccounts)
         .rpc({ skipPreflight: true });
 
       return sig;
     },
-    [l1Program, publicKey]
+    [l1Program, l1Connection, publicKey]
   );
 
   // -----------------------------------------------------------------------
@@ -494,6 +524,56 @@ export function useAuctionActions(): UseAuctionActionsReturn {
     [l1Program, publicKey]
   );
 
+  // -----------------------------------------------------------------------
+  // forfeitAuction (L1 — handles defaulted winner)
+  // -----------------------------------------------------------------------
+  const forfeitAuction = useCallback(
+    async (
+      auctionStatePubkey: PublicKey,
+      nftMint: PublicKey,
+      seller: PublicKey,
+      winner: PublicKey
+    ): Promise<string> => {
+      if (!l1Program || !publicKey) {
+        throw new Error("Wallet not connected");
+      }
+
+      const [auctionVault] = getVaultPDA(auctionStatePubkey);
+      const [winnerDeposit] = getDepositPDA(auctionStatePubkey, winner);
+
+      const escrowNftTokenAccount = await getAssociatedTokenAddress(
+        nftMint,
+        auctionStatePubkey,
+        true
+      );
+
+      const sellerNftTokenAccount = await getAssociatedTokenAddress(
+        nftMint,
+        seller
+      );
+
+      const sig = await l1Program.methods
+        .forfeitAuction()
+        .accounts({
+          payer: publicKey,
+          auctionState: auctionStatePubkey,
+          auctionVault,
+          winnerDeposit,
+          seller,
+          nftMint,
+          escrowNftTokenAccount,
+          sellerNftTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc({ skipPreflight: true });
+
+      return sig;
+    },
+    [l1Program, publicKey]
+  );
+
   return {
     createAuction,
     deposit,
@@ -504,6 +584,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
     undelegateAuction,
     settleAuction,
     claimRefund,
+    forfeitAuction,
     ready: !!l1Program && !!publicKey,
   };
 }

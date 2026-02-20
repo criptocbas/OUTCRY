@@ -42,4 +42,10 @@ pub enum OutcryError {
     EscrowNotEmpty,
     #[msg("NFT mint must have 0 decimals")]
     InvalidNftMint,
+    #[msg("Could not parse Metaplex metadata account")]
+    InvalidMetadata,
+    #[msg("Missing creator account in remaining_accounts for royalty distribution")]
+    MissingCreatorAccount,
+    #[msg("Forfeit not needed — winner has sufficient deposit for the winning bid")]
+    ForfeitNotNeeded,
 }

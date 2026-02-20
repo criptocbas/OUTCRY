@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { PublicKey } from "@solana/web3.js";
+import { useWallet } from "@solana/wallet-adapter-react";
 import BN from "bn.js";
 import {
   LAMPORTS_PER_SOL,
@@ -11,6 +12,7 @@ import {
   DEFAULT_EXTENSION_WINDOW,
 } from "@/lib/constants";
 import { useAuctionActions } from "@/hooks/useAuctionActions";
+import { getAuctionPDA } from "@/lib/program";
 
 // ---------------------------------------------------------------------------
 // Duration options
@@ -45,6 +47,7 @@ const fadeUp = {
 
 export default function CreateAuctionPage() {
   const { createAuction, ready } = useAuctionActions();
+  const { publicKey } = useWallet();
 
   const [nftMint, setNftMint] = useState("");
   const [reservePrice, setReservePrice] = useState("1.00");
@@ -54,6 +57,7 @@ export default function CreateAuctionPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successKey, setSuccessKey] = useState<string | null>(null);
+  const [auctionAddress, setAuctionAddress] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,10 +101,12 @@ export default function CreateAuctionPage() {
         minBidIncrement: new BN(incrementLamports),
       });
 
-      // The createAuction returns the tx signature. We need the PDA address.
-      // Derive it from the wallet + mint.
-      // For now, we show the success with the signature and let user navigate.
       setSuccessKey(sig);
+      // Derive the auction PDA so we can link directly to it
+      if (publicKey) {
+        const [auctionPDA] = getAuctionPDA(publicKey, mintPubkey);
+        setAuctionAddress(auctionPDA.toBase58());
+      }
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Failed to create auction";
@@ -157,21 +163,34 @@ export default function CreateAuctionPage() {
           </div>
 
           <div className="flex w-full flex-col gap-3">
+            {auctionAddress && (
+              <Link
+                href={`/auction/${auctionAddress}`}
+                className="flex h-11 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light"
+              >
+                Go to Auction
+              </Link>
+            )}
             <Link
               href="/"
-              className="flex h-11 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light"
+              className={`flex h-11 w-full items-center justify-center rounded-md text-sm font-medium tracking-[0.15em] uppercase transition-all duration-200 ${
+                auctionAddress
+                  ? "border border-gold/30 text-gold hover:border-gold hover:bg-gold/5"
+                  : "bg-gold text-jet hover:bg-gold-light"
+              }`}
             >
               View All Auctions
             </Link>
             <button
               onClick={() => {
                 setSuccessKey(null);
+                setAuctionAddress(null);
                 setNftMint("");
                 setReservePrice("1.00");
                 setDuration(3600);
                 setMinBidIncrement("0.1");
               }}
-              className="flex h-11 w-full items-center justify-center rounded-md border border-gold/30 text-sm font-medium tracking-[0.15em] text-gold uppercase transition-all duration-200 hover:border-gold hover:bg-gold/5"
+              className="flex h-11 w-full items-center justify-center rounded-md border border-cream/10 text-sm font-medium tracking-[0.15em] text-cream/40 uppercase transition-all duration-200 hover:border-cream/20 hover:text-cream/60"
             >
               Create Another
             </button>

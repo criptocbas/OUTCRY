@@ -80,4 +80,11 @@ pub mod outcry {
     pub fn close_auction(ctx: Context<CloseAuction>) -> Result<()> {
         instructions::close_auction::handle_close_auction(ctx)
     }
+
+    /// Handles a defaulted auction where the winner's deposit is insufficient.
+    /// Returns NFT to seller, forfeits winner's deposit as penalty, sets Settled
+    /// so other bidders can claim refunds.
+    pub fn forfeit_auction(ctx: Context<ForfeitAuction>) -> Result<()> {
+        instructions::forfeit_auction::handle_forfeit_auction(ctx)
+    }
 }
