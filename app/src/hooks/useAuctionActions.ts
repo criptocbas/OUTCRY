@@ -487,25 +487,32 @@ export function useAuctionActions(): UseAuctionActionsReturn {
       });
 
       // Build transaction manually for better error handling
-      const tx = await l1Program.methods
-        .settleAuction()
-        .accounts({
-          payer: publicKey,
-          auctionState: auctionStatePubkey,
-          auctionVault,
-          winnerDeposit,
-          seller,
-          winner,
-          nftMint,
-          nftMetadata,
-          escrowNftTokenAccount,
-          winnerNftTokenAccount,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .remainingAccounts(remainingAccounts)
-        .transaction();
+      let tx;
+      try {
+        tx = await l1Program.methods
+          .settleAuction()
+          .accounts({
+            payer: publicKey,
+            auctionState: auctionStatePubkey,
+            auctionVault,
+            winnerDeposit,
+            seller,
+            winner,
+            nftMint,
+            nftMetadata,
+            escrowNftTokenAccount,
+            winnerNftTokenAccount,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .remainingAccounts(remainingAccounts)
+          .transaction();
+        console.log("[settle] transaction built, instructions:", tx.instructions.length);
+      } catch (buildErr) {
+        console.error("[settle] transaction build failed:", buildErr);
+        throw new Error(`Transaction build failed: ${buildErr instanceof Error ? buildErr.message : String(buildErr)}`);
+      }
 
       tx.feePayer = publicKey;
       const { blockhash, lastValidBlockHeight } =
@@ -513,16 +520,52 @@ export function useAuctionActions(): UseAuctionActionsReturn {
       tx.recentBlockhash = blockhash;
       tx.lastValidBlockHeight = lastValidBlockHeight;
 
-      const signed = await wallet.signTransaction(tx);
-      const sig = await l1Connection.sendRawTransaction(signed.serialize(), {
-        skipPreflight: true,
-      });
+      let signed;
+      try {
+        signed = await wallet.signTransaction(tx);
+        console.log("[settle] transaction signed");
+      } catch (signErr) {
+        console.error("[settle] signing failed:", signErr);
+        throw new Error(`Wallet signing failed: ${signErr instanceof Error ? signErr.message : String(signErr)}`);
+      }
+
+      let sig: string;
+      try {
+        sig = await l1Connection.sendRawTransaction(signed.serialize(), {
+          skipPreflight: true,
+        });
+        console.log("[settle] sent, signature:", sig);
+      } catch (sendErr: unknown) {
+        console.error("[settle] sendRawTransaction failed:", sendErr);
+        // Extract actual error from SendTransactionError
+        const errObj = sendErr as { transactionMessage?: string; transactionLogs?: string[]; logs?: string[]; message?: string };
+        const txMsg = errObj.transactionMessage || errObj.message || String(sendErr);
+        const txLogs = errObj.transactionLogs || errObj.logs;
+        if (txLogs) console.error("[settle] transaction logs:", txLogs);
+        throw new Error(`Send failed: ${txMsg}`);
+      }
 
       // Wait for confirmation
-      await l1Connection.confirmTransaction(
-        { signature: sig, blockhash, lastValidBlockHeight },
-        "confirmed"
-      );
+      try {
+        await l1Connection.confirmTransaction(
+          { signature: sig, blockhash, lastValidBlockHeight },
+          "confirmed"
+        );
+        console.log("[settle] confirmed:", sig);
+      } catch (confirmErr: unknown) {
+        console.error("[settle] confirmation failed:", confirmErr);
+        // Check if tx actually succeeded despite confirmation timeout
+        const status = await l1Connection.getSignatureStatus(sig);
+        console.log("[settle] signature status:", JSON.stringify(status));
+        if (status?.value?.err) {
+          throw new Error(`Transaction failed on-chain: ${JSON.stringify(status.value.err)}`);
+        }
+        if (status?.value?.confirmationStatus === "confirmed" || status?.value?.confirmationStatus === "finalized") {
+          console.log("[settle] transaction actually succeeded despite confirmation error");
+          return sig;
+        }
+        throw new Error(`Confirmation failed: ${confirmErr instanceof Error ? confirmErr.message : String(confirmErr)}`);
+      }
 
       return sig;
     },
