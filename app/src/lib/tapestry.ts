@@ -121,7 +121,8 @@ export async function getProfile(
     };
 
     return { profile, socialCounts };
-  } catch {
+  } catch (err) {
+    console.error("[tapestry] getProfile failed for", walletAddress, err);
     return null;
   }
 }
