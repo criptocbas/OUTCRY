@@ -22,22 +22,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Build properties array from content text + custom properties
+    const properties: { key: string; value: string }[] = [
+      { key: "content", value: content },
+      { key: "contentType", value: "text" },
+    ];
+    if (customProperties) {
+      for (const [key, value] of Object.entries(customProperties)) {
+        properties.push({ key, value: String(value) });
+      }
+    }
+
+    // Tapestry uses POST /contents/findOrCreate
+    const contentId = `outcry-${profileId}-${Date.now()}`;
     const res = await fetch(
-      `${TAPESTRY_BASE}/contents/create?apiKey=${API_KEY}`,
+      `${TAPESTRY_BASE}/contents/findOrCreate?apiKey=${API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: contentId,
           profileId,
-          content,
-          contentType: "text",
-          ...(customProperties && { customProperties }),
-          blockchain: "SOLANA",
-          execution: "FAST_UNCONFIRMED",
+          properties,
         }),
       }
     );
-    const data = await res.json();
+
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error("Tapestry content response not JSON:", text.slice(0, 200));
+      return NextResponse.json(
+        { error: "Invalid response from Tapestry" },
+        { status: 502 }
+      );
+    }
 
     if (!res.ok) {
       return NextResponse.json(data, { status: res.status });
