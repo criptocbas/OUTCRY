@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const TAPESTRY_BASE = "https://api.usetapestry.dev/v1";
+const TAPESTRY_BASE = "https://api.usetapestry.dev/api/v1";
 const API_KEY = process.env.TAPESTRY_API_KEY;
 
 export async function GET(req: NextRequest) {
