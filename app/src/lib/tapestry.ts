@@ -107,9 +107,20 @@ export async function getProfile(
   walletAddress: string
 ): Promise<ProfileWithCounts | null> {
   try {
-    return await fetchJson<ProfileWithCounts>(
+    const raw = await fetchJson<Record<string, unknown>>(
       `${API_BASE}/profile/${encodeURIComponent(walletAddress)}`
     );
+
+    const profile = (raw.profile ?? raw) as ProfileWithCounts["profile"];
+    const partial = (raw.socialCounts ?? {}) as Partial<SocialCounts>;
+    const socialCounts: SocialCounts = {
+      followers: partial.followers ?? 0,
+      following: partial.following ?? 0,
+      posts: partial.posts ?? 0,
+      likes: partial.likes ?? 0,
+    };
+
+    return { profile, socialCounts };
   } catch {
     return null;
   }
@@ -119,11 +130,22 @@ export async function findOrCreateProfile(
   walletAddress: string,
   username: string
 ): Promise<ProfileWithCounts> {
-  return fetchJson<ProfileWithCounts>(`${API_BASE}/profile`, {
+  const raw = await fetchJson<Record<string, unknown>>(`${API_BASE}/profile`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ walletAddress, username }),
   });
+
+  // Tapestry's findOrCreate response may omit socialCounts — provide defaults
+  const profile = (raw.profile ?? raw) as ProfileWithCounts["profile"];
+  const socialCounts = (raw.socialCounts ?? {
+    followers: 0,
+    following: 0,
+    posts: 0,
+    likes: 0,
+  }) as SocialCounts;
+
+  return { profile, socialCounts };
 }
 
 // -- Follows ----------------------------------------------------------------

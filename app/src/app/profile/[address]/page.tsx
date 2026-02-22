@@ -141,14 +141,14 @@ export default function ProfilePage({
           <div className="flex items-center gap-8">
             <Stat
               label="Followers"
-              value={profile.socialCounts.followers}
+              value={profile.socialCounts?.followers ?? 0}
             />
             <Stat
               label="Following"
-              value={profile.socialCounts.following}
+              value={profile.socialCounts?.following ?? 0}
             />
-            <Stat label="Posts" value={profile.socialCounts.posts} />
-            <Stat label="Likes" value={profile.socialCounts.likes} />
+            <Stat label="Posts" value={profile.socialCounts?.posts ?? 0} />
+            <Stat label="Likes" value={profile.socialCounts?.likes ?? 0} />
           </div>
         )}
 
