@@ -64,7 +64,7 @@ export default function BidHistory({ bids }: BidHistoryProps) {
           <AnimatePresence initial={false}>
             {sorted.map((bid, i) => (
               <motion.div
-                key={`${bid.bidder}-${bid.timestamp}-${i}`}
+                key={`${bid.bidder}-${bid.amount}`}
                 initial={{ opacity: 0, x: -24 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -24 }}

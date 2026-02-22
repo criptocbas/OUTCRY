@@ -351,13 +351,14 @@ export default function AuctionRoomPage({
 
   // Bid history — currently shows current bid as latest entry.
   // Real bid history would come from transaction logs / events.
+  // Use startTime as a stable timestamp so polling doesn't re-trigger animations.
   const bidHistory =
     auction && auction.currentBid.toNumber() > 0
       ? [
           {
             bidder: auction.highestBidder.toBase58(),
             amount: auction.currentBid.toNumber(),
-            timestamp: Math.floor(Date.now() / 1000),
+            timestamp: auction.startTime.toNumber(),
           },
         ]
       : [];
