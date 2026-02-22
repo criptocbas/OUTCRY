@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const res = await fetch(
-      `${TAPESTRY_BASE}/followers/check?apiKey=${API_KEY}&followerId=${encodeURIComponent(followerId)}&followeeId=${encodeURIComponent(followeeId)}`
+      `${TAPESTRY_BASE}/followers/state?apiKey=${API_KEY}&startId=${encodeURIComponent(followerId)}&endId=${encodeURIComponent(followeeId)}`
     );
     const data = await res.json();
 
@@ -31,7 +31,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(data, { status: res.status });
     }
 
-    return NextResponse.json(data);
+    // Normalize response to match our FollowStatus interface
+    return NextResponse.json({
+      isFollowing: data.isFollowing ?? false,
+    });
   } catch (error) {
     console.error("Tapestry follow check error:", error);
     return NextResponse.json(

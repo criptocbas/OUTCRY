@@ -1,37 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-const TAPESTRY_BASE = "https://api.usetapestry.dev/api/v1";
-const API_KEY = process.env.TAPESTRY_API_KEY;
-
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  if (!API_KEY) {
-    return NextResponse.json(
-      { error: "Tapestry not configured" },
-      { status: 503 }
-    );
-  }
-
-  const { id } = await params;
-
-  try {
-    const res = await fetch(
-      `${TAPESTRY_BASE}/likes/count/${encodeURIComponent(id)}?apiKey=${API_KEY}`
-    );
-    const data = await res.json();
-
-    if (!res.ok) {
-      return NextResponse.json(data, { status: res.status });
-    }
-
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Tapestry like count error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch like count" },
-      { status: 500 }
-    );
-  }
+// Tapestry does not have a dedicated like count endpoint.
+// Return 0 — the UI tracks count optimistically after toggle.
+export async function GET() {
+  return NextResponse.json({ count: 0 });
 }

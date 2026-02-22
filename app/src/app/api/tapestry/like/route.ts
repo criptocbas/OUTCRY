@@ -22,16 +22,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const res = await fetch(`${TAPESTRY_BASE}/likes?apiKey=${API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profileId,
-        contentId,
-        blockchain: "SOLANA",
-        execution: "FAST_UNCONFIRMED",
-      }),
-    });
+    // Tapestry: POST /likes/{nodeId} with { startId } in body
+    const res = await fetch(
+      `${TAPESTRY_BASE}/likes/${encodeURIComponent(contentId)}?apiKey=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startId: profileId }),
+      }
+    );
     const data = await res.json();
 
     if (!res.ok) {
@@ -67,16 +66,15 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const res = await fetch(`${TAPESTRY_BASE}/likes?apiKey=${API_KEY}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profileId,
-        contentId,
-        blockchain: "SOLANA",
-        execution: "FAST_UNCONFIRMED",
-      }),
-    });
+    // Tapestry: DELETE /likes/{nodeId} with { startId } in body
+    const res = await fetch(
+      `${TAPESTRY_BASE}/likes/${encodeURIComponent(contentId)}?apiKey=${API_KEY}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startId: profileId }),
+      }
+    );
     const data = await res.json();
 
     if (!res.ok) {

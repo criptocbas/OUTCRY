@@ -22,15 +22,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const res = await fetch(`${TAPESTRY_BASE}/followers?apiKey=${API_KEY}`, {
+    const res = await fetch(`${TAPESTRY_BASE}/followers/add?apiKey=${API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        startId,
-        endId,
-        blockchain: "SOLANA",
-        execution: "FAST_UNCONFIRMED",
-      }),
+      body: JSON.stringify({ startId, endId }),
     });
     const data = await res.json();
 
@@ -67,15 +62,11 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const res = await fetch(`${TAPESTRY_BASE}/followers?apiKey=${API_KEY}`, {
-      method: "DELETE",
+    // Tapestry uses POST /followers/remove (not DELETE)
+    const res = await fetch(`${TAPESTRY_BASE}/followers/remove?apiKey=${API_KEY}`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        startId,
-        endId,
-        blockchain: "SOLANA",
-        execution: "FAST_UNCONFIRMED",
-      }),
+      body: JSON.stringify({ startId, endId }),
     });
     const data = await res.json();
 
