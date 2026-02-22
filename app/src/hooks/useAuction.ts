@@ -84,13 +84,19 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
   // subscription callback without recreating the subscription on every render.
   const programRef = useRef<Program | null>(null);
 
+  // Track whether we've done the initial fetch so polling doesn't flash loading
+  const hasFetchedRef = useRef(false);
+
   const fetchAuction = useCallback(async () => {
     if (!auctionPublicKey || !wallet) {
       setAuction(null);
       return;
     }
 
-    setLoading(true);
+    // Only show loading spinner on first fetch
+    if (!hasFetchedRef.current) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -106,6 +112,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
       setAuction(null);
     } finally {
       setLoading(false);
+      hasFetchedRef.current = true;
     }
   }, [auctionPublicKey, wallet, connection]);
 
@@ -114,7 +121,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
     fetchAuction();
   }, [fetchAuction]);
 
-  // Real-time subscription via onAccountChange
+  // Real-time subscription via onAccountChange (works on L1, may not work on ER)
   useEffect(() => {
     if (!auctionPublicKey || !wallet) return;
 
@@ -155,6 +162,18 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
       }
     };
   }, [auctionPublicKey, wallet, connection]);
+
+  // Polling fallback: Magic Router WebSocket may not relay ER account changes,
+  // so poll every 3 seconds to keep the UI in sync during active auctions.
+  useEffect(() => {
+    if (!auctionPublicKey || !wallet) return;
+
+    const interval = setInterval(() => {
+      fetchAuction();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [auctionPublicKey, wallet, fetchAuction]);
 
   return {
     auction,
