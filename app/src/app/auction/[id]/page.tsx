@@ -82,6 +82,7 @@ export default function AuctionRoomPage({
   const [bidFlash, setBidFlash] = useState(false);
   const [prevBid, setPrevBid] = useState<number | null>(null);
   const [prevHighestBidder, setPrevHighestBidder] = useState<string | null>(null);
+  const [bidHistory, setBidHistory] = useState<Array<{ bidder: string; amount: number; timestamp: number }>>([]);
 
   const addToast = useCallback(
     (message: string, type: "success" | "error") => {
@@ -95,16 +96,33 @@ export default function AuctionRoomPage({
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Detect bid changes for flash animation + outbid notification
+  // Detect bid changes for flash animation, outbid notification, + history accumulation
   useEffect(() => {
     if (!auction) return;
     const currentBid = auction.currentBid.toNumber();
     const currentBidder = auction.highestBidder?.toBase58() ?? null;
 
-    if (prevBid !== null && currentBid > prevBid) {
+    if (prevBid === null && currentBid > 0 && currentBidder) {
+      // First load — seed history with the existing highest bid
+      setBidHistory([{
+        bidder: currentBidder,
+        amount: currentBid,
+        timestamp: auction.startTime.toNumber(),
+      }]);
+    } else if (prevBid !== null && currentBid > prevBid && currentBidder) {
       // New bid arrived — trigger flash
       setBidFlash(true);
       setTimeout(() => setBidFlash(false), 800);
+
+      // Accumulate into history
+      setBidHistory(prev => [
+        ...prev,
+        {
+          bidder: currentBidder,
+          amount: currentBid,
+          timestamp: Math.floor(Date.now() / 1000),
+        },
+      ]);
 
       // Check if user was outbid
       if (
@@ -386,20 +404,6 @@ export default function AuctionRoomPage({
       setActionLoading(false);
     }
   }, [auction, actions, id, addToast, refetch, refetchDeposit]);
-
-  // Bid history — currently shows current bid as latest entry.
-  // Real bid history would come from transaction logs / events.
-  // Use startTime as a stable timestamp so polling doesn't re-trigger animations.
-  const bidHistory =
-    auction && auction.currentBid.toNumber() > 0
-      ? [
-          {
-            bidder: auction.highestBidder.toBase58(),
-            amount: auction.currentBid.toNumber(),
-            timestamp: auction.startTime.toNumber(),
-          },
-        ]
-      : [];
 
   // ---------------------------------------------------------------------------
   // Loading state
