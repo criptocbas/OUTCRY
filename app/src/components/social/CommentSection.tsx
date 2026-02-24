@@ -12,6 +12,7 @@ import { useTapestryProfile } from "@/hooks/useTapestryProfile";
 
 interface CommentSectionProps {
   auctionId: string;
+  headerRight?: React.ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,7 +38,7 @@ function formatRelativeTime(iso: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function CommentSection({ auctionId }: CommentSectionProps) {
+export default function CommentSection({ auctionId, headerRight }: CommentSectionProps) {
   const { publicKey } = useWallet();
   const walletAddress = publicKey?.toBase58() ?? null;
   const { profile: myProfile } = useTapestryProfile(walletAddress);
@@ -75,18 +76,21 @@ export default function CommentSection({ auctionId }: CommentSectionProps) {
     <div className="flex flex-col rounded-lg border border-charcoal-light bg-charcoal">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-charcoal-light px-5 py-3">
-        <h3
-          className="text-[10px] tracking-[0.2em] text-cream/40 uppercase"
-          style={{ fontFamily: "var(--font-sans)" }}
-        >
-          Comments
-        </h3>
-        <span
-          className="text-[10px] tabular-nums text-muted"
-          style={{ fontFamily: "var(--font-sans)" }}
-        >
-          {comments.length}
-        </span>
+        <div className="flex items-center gap-3">
+          <h3
+            className="text-[10px] tracking-[0.2em] text-cream/40 uppercase"
+            style={{ fontFamily: "var(--font-sans)" }}
+          >
+            Comments
+          </h3>
+          <span
+            className="text-[10px] tabular-nums text-muted"
+            style={{ fontFamily: "var(--font-sans)" }}
+          >
+            {comments.length}
+          </span>
+        </div>
+        {headerRight && <div className="flex items-center">{headerRight}</div>}
       </div>
 
       {/* Comment list */}

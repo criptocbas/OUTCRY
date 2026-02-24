@@ -564,13 +564,6 @@ export default function AuctionRoomPage({
                 </div>
               </div>
 
-              {/* Like button */}
-              <div className="flex items-center gap-2 border-t border-charcoal-light/50 pt-3">
-                <LikeButton
-                  auctionId={id}
-                  userProfileId={myProfileId}
-                />
-              </div>
             </div>
           </motion.div>
 
@@ -818,8 +811,13 @@ export default function AuctionRoomPage({
               <BidHistory bids={bidHistory} />
             </div>
 
-            {/* Comments */}
-            <CommentSection auctionId={id} />
+            {/* Comments + Like */}
+            <CommentSection
+              auctionId={id}
+              headerRight={
+                <LikeButton auctionId={id} userProfileId={myProfileId} />
+              }
+            />
           </motion.div>
         </div>
       </motion.div>
