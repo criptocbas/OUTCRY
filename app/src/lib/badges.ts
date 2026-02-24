@@ -18,8 +18,6 @@ import {
 import {
   createTree,
   mintV1,
-  findLeafAssetIdPda,
-  parseLeafFromMintV1Transaction,
 } from "@metaplex-foundation/mpl-bubblegum";
 import { none } from "@metaplex-foundation/umi";
 import {
@@ -151,20 +149,16 @@ export async function mintBadge(
 ) {
   const merkleTree = publicKey(merkleTreeAddress);
   const recipient = publicKey(recipientAddress);
-  const metadataUri = buildBadgeMetadataUri(
-    badgeType,
-    auctionName,
-    auctionId,
-    winningBid
-  );
 
+  // Bubblegum limits URI to 128 chars. Use empty string for hackathon —
+  // badge type and auction info are encoded in the name/symbol on-chain.
   const builder = mintV1(umi, {
     leafOwner: recipient,
     merkleTree,
     metadata: {
       name: `${BADGE_NAMES[badgeType]} - ${auctionName}`.slice(0, 32),
       symbol: "OUTCRY",
-      uri: metadataUri,
+      uri: "",
       sellerFeeBasisPoints: 0,
       collection: none(),
       creators: [
@@ -177,19 +171,12 @@ export async function mintBadge(
     },
   });
 
-  const result = await builder.sendAndConfirm(umi);
-
-  // Parse the minted leaf to get the asset ID
-  const leaf = await parseLeafFromMintV1Transaction(umi, result.signature);
-  const assetId = findLeafAssetIdPda(umi, {
-    merkleTree,
-    leafIndex: leaf.nonce,
-  });
+  // Use send() instead of sendAndConfirm() to avoid WebSocket issues
+  // in the Next.js server environment (bufferutil compatibility).
+  const result = await builder.send(umi);
 
   return {
-    signature: result.signature,
-    assetId: assetId[0],
-    leafIndex: leaf.nonce,
+    signature: result,
   };
 }
 
@@ -244,11 +231,16 @@ export async function fetchUserBadges(
           badgeType = "present";
         }
 
-        // Extract auction name
+        // Extract auction name from attributes or on-chain name
         const auctionAttr = attributes.find(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (a: any) => a.trait_type === "Auction"
         );
+        let auctionName = auctionAttr?.value ?? "";
+        if (!auctionName && name.includes(" - ")) {
+          // Parse from on-chain name: "OUTCRY Victor Badge - AuctionName"
+          auctionName = name.split(" - ").slice(1).join(" - ");
+        }
 
         return {
           id: asset.id,
@@ -259,7 +251,7 @@ export async function fetchUserBadges(
             asset.content?.files?.[0]?.uri ??
             "",
           badgeType,
-          auctionName: auctionAttr?.value ?? "Unknown Auction",
+          auctionName: auctionName || "Unknown Auction",
           attributes,
         };
       });

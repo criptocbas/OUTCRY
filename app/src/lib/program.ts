@@ -88,6 +88,31 @@ export interface MetaplexCreatorInfo {
   share: number;
 }
 
+// BidderDeposit discriminator from IDL: [210, 248, 39, 93, 167, 248, 255, 48]
+// Pre-computed base58: "cHfghLZwuzf"
+const BIDDER_DEPOSIT_DISCRIMINATOR_B58 = "cHfghLZwuzf";
+
+/**
+ * Fetch all bidder wallet addresses that have a BidderDeposit PDA for a given auction.
+ * Uses getProgramAccounts with memcmp filters on L1 (BidderDeposit is never delegated).
+ *
+ * BidderDeposit layout: discriminator (8) | auction (32) | bidder (32) | amount (8) | bump (1)
+ */
+export async function getAuctionBidders(
+  connection: Connection,
+  auctionState: PublicKey
+): Promise<PublicKey[]> {
+  const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+    filters: [
+      { memcmp: { offset: 0, bytes: BIDDER_DEPOSIT_DISCRIMINATOR_B58 } },
+      { memcmp: { offset: 8, bytes: auctionState.toBase58() } },
+    ],
+    dataSlice: { offset: 40, length: 32 }, // just the bidder pubkey
+  });
+
+  return accounts.map((a) => new PublicKey(a.account.data));
+}
+
 /**
  * Parse seller_fee_basis_points and creators from raw Metaplex metadata account data.
  * Returns null if the data cannot be parsed.

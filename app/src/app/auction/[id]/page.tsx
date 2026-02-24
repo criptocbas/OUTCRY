@@ -20,6 +20,7 @@ import { truncateAddress, formatSOL } from "@/lib/utils";
 import { useTapestryProfile } from "@/hooks/useTapestryProfile";
 import { useNftMetadata } from "@/hooks/useNftMetadata";
 import { getProfile, createContent } from "@/lib/tapestry";
+import { getAuctionBidders } from "@/lib/program";
 import { DELEGATION_PROGRAM_ID, DEVNET_RPC } from "@/lib/constants";
 import NftImage from "@/components/auction/NftImage";
 
@@ -116,6 +117,7 @@ export default function AuctionRoomPage({
   const walletAddress = publicKey?.toBase58() ?? null;
   const { profile: myTapestryProfile } = useTapestryProfile(walletAddress);
   const myProfileId = myTapestryProfile?.profile?.id ?? null;
+  const { metadata: nftMetadata } = useNftMetadata(auction?.nftMint?.toBase58() ?? null);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
@@ -422,6 +424,45 @@ export default function AuctionRoomPage({
           })
           .catch(() => {});
       }
+
+      // Mint badges (best-effort — never blocks settlement success)
+      try {
+        setProgressLabel("Minting badges...");
+        const auctionPubkey = new PublicKey(id);
+        const bidders = await getAuctionBidders(l1Connection, auctionPubkey);
+        const winnerAddr = auction.highestBidder?.toBase58() ?? null;
+        const auctionName = nftMetadata?.name ?? truncateAddress(auction.nftMint.toBase58());
+        const winBidStr = formatSOL(auction.currentBid.toNumber());
+
+        const recipients = bidders.map((bidder) => {
+          const addr = bidder.toBase58();
+          const isVictor = addr === winnerAddr;
+          return {
+            address: addr,
+            badgeType: isVictor ? ("victor" as const) : ("contender" as const),
+            auctionName,
+            auctionId: id,
+            ...(isVictor ? { winningBid: `${winBidStr} SOL` } : {}),
+          };
+        });
+
+        if (recipients.length > 0) {
+          const res = await fetch("/api/badges/mint", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ recipients }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const minted = data.results?.filter((r: { success: boolean }) => r.success).length ?? 0;
+            if (minted > 0) {
+              addToast(`Minted ${minted} badge${minted > 1 ? "s" : ""}!`, "success");
+            }
+          }
+        }
+      } catch (badgeErr) {
+        console.error("Badge minting failed (non-critical):", badgeErr);
+      }
     } catch (err: unknown) {
       const msg = extractErrorMessage(err, "Settlement failed");
       console.error("Settlement error:", err);
@@ -430,7 +471,7 @@ export default function AuctionRoomPage({
       setActionLoading(false);
       setProgressLabel(null);
     }
-  }, [auction, actions, id, addToast, refetch, publicKey, isDelegated, isActive, timerExpired, l1Connection]);
+  }, [auction, actions, id, addToast, refetch, publicKey, isDelegated, isActive, timerExpired, l1Connection, nftMetadata]);
 
   // -------------------------------------------------------------------------
   // Claim refund
