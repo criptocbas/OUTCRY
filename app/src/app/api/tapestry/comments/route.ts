@@ -106,7 +106,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(data, { status: res.status });
     }
 
-    return NextResponse.json(data);
+    // Normalize response to match our Comment interface
+    const normalized = {
+      id: data.id ?? `comment-${Date.now()}`,
+      profileId: data.profileId ?? profileId,
+      contentId: data.contentId ?? contentId,
+      text: data.text ?? text,
+      createdAt: data.createdAt ?? new Date().toISOString(),
+      updatedAt: data.updatedAt ?? new Date().toISOString(),
+      author: data.author ?? { id: profileId, username: profileId },
+    };
+
+    return NextResponse.json(normalized);
   } catch (error) {
     console.error("Tapestry comment create error:", error);
     return NextResponse.json(

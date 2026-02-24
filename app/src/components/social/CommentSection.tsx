@@ -128,17 +128,10 @@ export default function CommentSection({ auctionId }: CommentSectionProps) {
               <div className="flex items-start gap-3">
                 {/* Author badge */}
                 <div className="flex-shrink-0 pt-0.5">
-                  {comment.author ? (
-                    <AuthorAvatar
-                      username={comment.author.username}
-                      profileId={comment.author.id}
-                    />
-                  ) : (
-                    <AuthorAvatar
-                      username={null}
-                      profileId={comment.profileId}
-                    />
-                  )}
+                  <AuthorAvatar
+                    username={comment.author?.username ?? null}
+                    profileId={comment.author?.id ?? comment.profileId ?? "?"}
+                  />
                 </div>
 
                 {/* Content */}
@@ -149,7 +142,7 @@ export default function CommentSection({ auctionId }: CommentSectionProps) {
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
                       {comment.author?.username ||
-                        comment.profileId.slice(0, 6) + "..."}
+                        (comment.profileId ?? "anon").slice(0, 6) + "..."}
                     </span>
                     <span
                       className="flex-shrink-0 text-[10px] text-muted"
