@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Tapestry does not have a dedicated like check endpoint.
-// Return a default response so the UI works without errors.
+const TAPESTRY_BASE = "https://api.usetapestry.dev/api/v1";
+const API_KEY = process.env.TAPESTRY_API_KEY;
+
 export async function GET(req: NextRequest) {
   const profileId = req.nextUrl.searchParams.get("profileId");
   const contentId = req.nextUrl.searchParams.get("contentId");
@@ -13,6 +14,25 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Default to not liked — the UI tracks optimistic state after toggle
-  return NextResponse.json({ hasLiked: false });
+  if (!API_KEY) {
+    return NextResponse.json({ hasLiked: false });
+  }
+
+  try {
+    const res = await fetch(
+      `${TAPESTRY_BASE}/contents/${encodeURIComponent(contentId)}?apiKey=${API_KEY}&requestingProfileId=${encodeURIComponent(profileId)}`
+    );
+
+    if (!res.ok) {
+      // Content node doesn't exist yet
+      return NextResponse.json({ hasLiked: false });
+    }
+
+    const data = await res.json();
+    const hasLiked = data.requestingProfileSocialInfo?.hasLiked ?? false;
+
+    return NextResponse.json({ hasLiked });
+  } catch {
+    return NextResponse.json({ hasLiked: false });
+  }
 }
