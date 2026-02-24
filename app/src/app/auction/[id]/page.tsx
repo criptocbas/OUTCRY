@@ -24,6 +24,44 @@ import { DELEGATION_PROGRAM_ID, DEVNET_RPC } from "@/lib/constants";
 import NftImage from "@/components/auction/NftImage";
 
 // ---------------------------------------------------------------------------
+// Error message extraction
+// ---------------------------------------------------------------------------
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  // Try standard Error.message first
+  if (err instanceof Error && err.message) {
+    const msg = err.message;
+
+    // Solana insufficient funds
+    if (msg.includes("0x1") || msg.includes("insufficient") || msg.includes("Insufficient")) {
+      return "Insufficient SOL balance";
+    }
+    // User rejected in wallet
+    if (msg.includes("User rejected") || msg.includes("rejected the request")) {
+      return "Transaction rejected";
+    }
+    // Anchor program errors — extract the readable part
+    if (msg.includes("custom program error")) {
+      const anchorMsg = msg.match(/Error Message: (.+?)\.?$/m)?.[1];
+      if (anchorMsg) return anchorMsg;
+    }
+    // SendTransactionError may wrap the real message
+    const errObj = err as { transactionMessage?: string; logs?: string[] };
+    if (errObj.transactionMessage) return errObj.transactionMessage;
+
+    return msg;
+  }
+
+  // Some errors are plain objects with a message field
+  if (err && typeof err === "object" && "message" in err) {
+    const msg = String((err as { message: unknown }).message);
+    if (msg && msg !== "undefined") return msg;
+  }
+
+  return fallback;
+}
+
+// ---------------------------------------------------------------------------
 // Toast notification
 // ---------------------------------------------------------------------------
 
@@ -216,7 +254,7 @@ export default function AuctionRoomPage({
         addToast(`Bid placed: ${formatSOL(bidLamports)} SOL`, "success");
         await refetch();
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Bid failed";
+        const msg = extractErrorMessage(err, "Bid failed");
         addToast(msg, "error");
       } finally {
         setActionLoading(false);
@@ -250,7 +288,7 @@ export default function AuctionRoomPage({
       addToast("Live on Ephemeral Rollup!", "success");
       await refetch();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to go live";
+      const msg = extractErrorMessage(err, "Failed to go live");
       addToast(msg, "error");
     } finally {
       setActionLoading(false);
@@ -378,7 +416,7 @@ export default function AuctionRoomPage({
           .catch(() => {});
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Settlement failed";
+      const msg = extractErrorMessage(err, "Settlement failed");
       console.error("Settlement error:", err);
       addToast(msg, "error");
     } finally {
@@ -398,7 +436,7 @@ export default function AuctionRoomPage({
       addToast("Refund claimed!", "success");
       await Promise.all([refetch(), refetchDeposit()]);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Refund failed";
+      const msg = extractErrorMessage(err, "Refund failed");
       addToast(msg, "error");
     } finally {
       setActionLoading(false);
@@ -718,7 +756,7 @@ export default function AuctionRoomPage({
                         addToast(`Deposited ${formatSOL(lamports)} SOL`, "success");
                         await refetchDeposit();
                       } catch (err: unknown) {
-                        const msg = err instanceof Error ? err.message : "Deposit failed";
+                        const msg = extractErrorMessage(err, "Deposit failed");
                         addToast(msg, "error");
                       } finally {
                         setActionLoading(false);
