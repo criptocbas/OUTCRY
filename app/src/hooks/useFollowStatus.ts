@@ -6,6 +6,7 @@ import {
   followUser,
   unfollowUser,
 } from "@/lib/tapestry";
+import { useTapestryProfile } from "./useTapestryProfile";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,22 +26,30 @@ export function useFollowStatus(
   myWallet: string | null,
   targetWallet: string | null
 ): UseFollowStatusReturn {
+  // Resolve wallet addresses → Tapestry profile IDs.
+  // The follow API expects profile IDs (usernames), not wallet addresses.
+  const { profile: myProfile } = useTapestryProfile(myWallet);
+  const { profile: targetProfile } = useTapestryProfile(targetWallet);
+
+  const myId = myProfile?.profile?.id ?? null;
+  const targetId = targetProfile?.profile?.id ?? null;
+
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Guard against stale responses when wallets change.
   const activeKeyRef = useRef<string | null>(null);
 
-  // Check follow status on mount / wallet change.
+  // Check follow status on mount / profile ID change.
   useEffect(() => {
-    if (!myWallet || !targetWallet || myWallet === targetWallet) {
+    if (!myId || !targetId || myId === targetId) {
       setIsFollowing(false);
       setLoading(false);
       activeKeyRef.current = null;
       return;
     }
 
-    const key = `${myWallet}:${targetWallet}`;
+    const key = `${myId}:${targetId}`;
     activeKeyRef.current = key;
 
     let cancelled = false;
@@ -48,7 +57,7 @@ export function useFollowStatus(
     async function check() {
       setLoading(true);
       try {
-        const status = await checkFollowStatus(myWallet!, targetWallet!);
+        const status = await checkFollowStatus(myId!, targetId!);
         if (!cancelled && activeKeyRef.current === key) {
           setIsFollowing(status.isFollowing);
         }
@@ -65,19 +74,19 @@ export function useFollowStatus(
     return () => {
       cancelled = true;
     };
-  }, [myWallet, targetWallet]);
+  }, [myId, targetId]);
 
   // Toggle follow / unfollow.
   const toggle = useCallback(async () => {
-    if (!myWallet || !targetWallet || myWallet === targetWallet) return;
+    if (!myId || !targetId || myId === targetId) return;
 
     setLoading(true);
     try {
       if (isFollowing) {
-        await unfollowUser(myWallet, targetWallet);
+        await unfollowUser(myId, targetId);
         setIsFollowing(false);
       } else {
-        await followUser(myWallet, targetWallet);
+        await followUser(myId, targetId);
         setIsFollowing(true);
       }
     } catch {
@@ -85,7 +94,7 @@ export function useFollowStatus(
     } finally {
       setLoading(false);
     }
-  }, [myWallet, targetWallet, isFollowing]);
+  }, [myId, targetId, isFollowing]);
 
   return { isFollowing, loading, toggle };
 }

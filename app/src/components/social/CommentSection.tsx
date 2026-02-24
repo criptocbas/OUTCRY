@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useAuctionComments } from "@/hooks/useAuctionComments";
+import { useTapestryProfile } from "@/hooks/useTapestryProfile";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,7 +39,9 @@ function formatRelativeTime(iso: string): string {
 
 export default function CommentSection({ auctionId }: CommentSectionProps) {
   const { publicKey } = useWallet();
-  const userProfileId = publicKey?.toBase58() ?? null;
+  const walletAddress = publicKey?.toBase58() ?? null;
+  const { profile: myProfile } = useTapestryProfile(walletAddress);
+  const userProfileId = myProfile?.profile?.id ?? null;
 
   const { comments, loading, error, postComment } = useAuctionComments(
     auctionId,

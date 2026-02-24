@@ -113,6 +113,9 @@ export default function AuctionRoomPage({
   const { auction, loading, error, refetch } = useAuction(id);
   const actions = useAuctionActions();
   const { publicKey } = useWallet();
+  const walletAddress = publicKey?.toBase58() ?? null;
+  const { profile: myTapestryProfile } = useTapestryProfile(walletAddress);
+  const myProfileId = myTapestryProfile?.profile?.id ?? null;
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
@@ -565,7 +568,7 @@ export default function AuctionRoomPage({
               <div className="flex items-center gap-2 border-t border-charcoal-light/50 pt-3">
                 <LikeButton
                   auctionId={id}
-                  userProfileId={publicKey?.toBase58() ?? null}
+                  userProfileId={myProfileId}
                 />
               </div>
             </div>
