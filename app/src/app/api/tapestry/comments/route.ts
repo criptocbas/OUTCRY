@@ -57,7 +57,26 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    console.log("[tapestry] GET comments raw response:", JSON.stringify(data).slice(0, 500));
+
+    // Normalize comments array — Tapestry may return different field names
+    const rawComments: Record<string, unknown>[] = data.comments ?? data ?? [];
+    const comments = (Array.isArray(rawComments) ? rawComments : []).map(
+      (c: Record<string, unknown>, i: number) => ({
+        id: c.id ?? c.commentId ?? `comment-${i}-${Date.now()}`,
+        profileId: c.profileId ?? c.authorId ?? "",
+        contentId: c.contentId ?? contentId,
+        text: c.text ?? c.content ?? c.body ?? "",
+        createdAt: c.createdAt ?? c.created_at ?? new Date().toISOString(),
+        updatedAt: c.updatedAt ?? c.updated_at ?? new Date().toISOString(),
+        author: c.author ?? null,
+      })
+    );
+
+    return NextResponse.json({
+      comments,
+      pagination: data.pagination ?? { total: comments.length, limit: 20, offset: 0, hasMore: false },
+    });
   } catch (error) {
     console.error("Tapestry comments fetch error:", error);
     return NextResponse.json(
