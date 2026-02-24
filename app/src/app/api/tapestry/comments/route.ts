@@ -59,19 +59,28 @@ export async function GET(req: NextRequest) {
     const data = await res.json();
     console.log("[tapestry] GET comments raw response:", JSON.stringify(data).slice(0, 500));
 
-    // Normalize comments array — Tapestry may return different field names
-    const rawComments: Record<string, unknown>[] = data.comments ?? data ?? [];
-    const comments = (Array.isArray(rawComments) ? rawComments : []).map(
-      (c: Record<string, unknown>, i: number) => ({
-        id: c.id ?? c.commentId ?? `comment-${i}-${Date.now()}`,
-        profileId: c.profileId ?? c.authorId ?? "",
+    // Tapestry returns: { comments: [{ comment: { id, text, created_at }, author: { id, username }, ... }] }
+    // Normalize to our flat Comment interface.
+    const rawComments = data.comments ?? data ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const comments = (Array.isArray(rawComments) ? rawComments : []).map((entry: any, i: number) => {
+      const c = entry.comment ?? entry;
+      const author = entry.author ?? null;
+      const createdMs = c.created_at ?? c.createdAt;
+      const createdAt = typeof createdMs === "number"
+        ? new Date(createdMs).toISOString()
+        : (createdMs ?? new Date().toISOString());
+
+      return {
+        id: c.id ?? `comment-${i}-${Date.now()}`,
+        profileId: author?.id ?? c.profileId ?? "",
         contentId: c.contentId ?? contentId,
-        text: c.text ?? c.content ?? c.body ?? "",
-        createdAt: c.createdAt ?? c.created_at ?? new Date().toISOString(),
-        updatedAt: c.updatedAt ?? c.updated_at ?? new Date().toISOString(),
-        author: c.author ?? null,
-      })
-    );
+        text: c.text ?? c.content ?? "",
+        createdAt,
+        updatedAt: createdAt,
+        author: author ? { id: author.id, username: author.username ?? author.id } : null,
+      };
+    });
 
     return NextResponse.json({
       comments,
