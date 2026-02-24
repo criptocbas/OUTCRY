@@ -186,9 +186,9 @@ async function main() {
     wallet.publicKey,
     wallet.publicKey,
     wallet.publicKey,
-    "OUTCRY Test NFT",
+    "OUTCRY Auction NFT",
     "OUTCRY",
-    "https://arweave.net/placeholder", // placeholder URI
+    "https://raw.githubusercontent.com/criptocbas/outcry/main/scripts/metadata/outcry-nft.json",
     500, // 5% royalties (seller_fee_basis_points)
     [
       {
