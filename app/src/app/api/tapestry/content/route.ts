@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
 
 const TAPESTRY_BASE = "https://api.usetapestry.dev/api/v1";
 const API_KEY = process.env.TAPESTRY_API_KEY;
@@ -9,6 +10,12 @@ export async function POST(req: NextRequest) {
       { error: "Tapestry not configured" },
       { status: 503 }
     );
+  }
+
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { allowed } = rateLimit(ip);
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   try {
