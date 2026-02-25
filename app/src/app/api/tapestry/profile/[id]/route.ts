@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 const TAPESTRY_BASE = "https://api.usetapestry.dev/api/v1";
 const API_KEY = process.env.TAPESTRY_API_KEY;
 
+// Alphanumeric, underscores, hyphens. 1-30 chars.
+const USERNAME_RE = /^[a-zA-Z0-9_-]{1,30}$/;
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,6 +25,13 @@ export async function PUT(
   const sanitized: Record<string, unknown> = {};
   for (const key of ALLOWED_FIELDS) {
     if (key in body) sanitized[key] = body[key];
+  }
+
+  if (typeof sanitized.username === "string" && !USERNAME_RE.test(sanitized.username)) {
+    return NextResponse.json(
+      { error: "Username must be 1-30 characters: letters, numbers, underscores, or hyphens" },
+      { status: 400 }
+    );
   }
 
   try {

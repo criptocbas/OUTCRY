@@ -275,9 +275,14 @@ export async function postComment(
   });
 }
 
-export async function deleteComment(commentId: string): Promise<void> {
+export async function deleteComment(
+  commentId: string,
+  profileId: string
+): Promise<void> {
   await fetchJson(`${API_BASE}/comments/${encodeURIComponent(commentId)}`, {
     method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profileId }),
   });
 }
 

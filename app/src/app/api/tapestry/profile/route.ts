@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 const TAPESTRY_BASE = "https://api.usetapestry.dev/api/v1";
 const API_KEY = process.env.TAPESTRY_API_KEY;
 
+// Alphanumeric, underscores, hyphens. 1-30 chars.
+const USERNAME_RE = /^[a-zA-Z0-9_-]{1,30}$/;
+
 export async function POST(req: NextRequest) {
   if (!API_KEY) {
     return NextResponse.json(
@@ -18,6 +21,13 @@ export async function POST(req: NextRequest) {
     if (!walletAddress || !username) {
       return NextResponse.json(
         { error: "walletAddress and username are required" },
+        { status: 400 }
+      );
+    }
+
+    if (!USERNAME_RE.test(username)) {
+      return NextResponse.json(
+        { error: "Username must be 1-30 characters: letters, numbers, underscores, or hyphens" },
         { status: 400 }
       );
     }
