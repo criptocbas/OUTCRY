@@ -145,6 +145,9 @@ async function getMagicBlockhash(
     }),
   });
   const data = await res.json();
+  if (!data.result?.blockhash || typeof data.result.lastValidBlockHeight !== "number") {
+    throw new Error("Invalid blockhash response from Magic Router");
+  }
   return data.result;
 }
 
