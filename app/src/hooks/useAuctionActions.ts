@@ -217,9 +217,15 @@ async function sendErTransaction(
   tx.lastValidBlockHeight = lastValidBlockHeight;
 
   const signed = await walletAdapter.signTransaction(tx);
+
+  // Measure only the send (ER acceptance) for the speed indicator.
+  // confirmTransaction adds polling latency that doesn't reflect ER speed.
+  const sendStart = performance.now();
   const sig = await sendConnection.sendRawTransaction(signed.serialize(), {
     skipPreflight: true,
   });
+  const sendMs = Math.round(performance.now() - sendStart);
+  debugLog(`[sendErTransaction] sent in ${sendMs}ms, sig: ${sig}`);
 
   // Wait for confirmation (matches the test pattern). Without this,
   // sequential ER operations (end → undelegate) can race.

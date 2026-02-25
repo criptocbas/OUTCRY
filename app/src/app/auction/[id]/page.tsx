@@ -331,16 +331,11 @@ export default function AuctionRoomPage({
           await refetchDeposit();
         }
 
-        // Step 2: Place bid (with speed indicator)
+        // Step 2: Place bid
         setProgressLabel("Placing bid...");
-        const t0 = performance.now();
-        const bidSig = await actions.placeBid(new PublicKey(id), new BN(bidLamports));
-        const elapsed = Math.round(performance.now() - t0);
-        addToast(
-          `Bid placed: ${formatSOL(bidLamports)} SOL \u2014 confirmed in ${elapsed}ms`,
-          "success",
-          explorerUrl(bidSig)
-        );
+        await actions.placeBid(new PublicKey(id), new BN(bidLamports));
+        // ER transactions don't appear on Solana Explorer — no explorer link
+        addToast(`Bid placed: ${formatSOL(bidLamports)} SOL`, "success");
         await refetch();
       } catch (err: unknown) {
         const msg = extractErrorMessage(err, "Bid failed");
@@ -402,8 +397,8 @@ export default function AuctionRoomPage({
       if (isActive && timerExpired) {
         setProgressLabel("Ending auction...");
         try {
-          const endSig = await actions.endAuction(new PublicKey(id));
-          addToast("Auction ended", "success", explorerUrl(endSig));
+          await actions.endAuction(new PublicKey(id));
+          addToast("Auction ended", "success");
         } catch (endErr: unknown) {
           const endMsg = endErr instanceof Error ? endErr.message : "";
           // Ignore if already ended
@@ -421,8 +416,8 @@ export default function AuctionRoomPage({
       if (isDelegated) {
         setProgressLabel("Returning state to L1...");
         try {
-          const undelSig = await actions.undelegateAuction(new PublicKey(id));
-          addToast("Undelegated from ER", "success", explorerUrl(undelSig));
+          await actions.undelegateAuction(new PublicKey(id));
+          addToast("Undelegated from ER", "success");
         } catch (undelegateErr: unknown) {
           const undelegateMsg = undelegateErr instanceof Error ? undelegateErr.message : "";
           // Only ignore if truly not delegated
