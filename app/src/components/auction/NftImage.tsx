@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNftMetadata } from "@/hooks/useNftMetadata";
 
 interface NftImageProps {
@@ -31,6 +31,9 @@ export default function NftImage({
   const { metadata, loading } = useNftMetadata(mintAddress);
   const [imgError, setImgError] = useState(false);
   const hue = seedHue(mintAddress);
+
+  // Reset error state when mint changes so the new image gets a chance to load
+  useEffect(() => { setImgError(false); }, [mintAddress]);
 
   const hasImage = metadata?.image && !imgError;
 
