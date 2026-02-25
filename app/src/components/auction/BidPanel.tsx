@@ -125,7 +125,8 @@ export default function BidPanel({
               min="0"
               value={bidInput}
               onChange={(e) => { setBidInput(e.target.value); setUserEdited(true); }}
-              className="w-full rounded-md border border-charcoal-light bg-jet px-4 py-3 pr-14 text-right text-lg tabular-nums text-cream placeholder-cream/20 outline-none transition-colors focus:border-gold/60"
+              aria-label="Bid amount in SOL"
+              className="w-full rounded-md border border-charcoal-light bg-jet px-4 py-3 pr-14 text-right text-lg tabular-nums text-cream placeholder-cream/20 outline-none transition-colors focus:border-gold/60 focus:ring-1 focus:ring-gold/30"
             />
             <span className="absolute top-1/2 right-4 -translate-y-1/2 text-xs text-cream/30 uppercase">
               SOL

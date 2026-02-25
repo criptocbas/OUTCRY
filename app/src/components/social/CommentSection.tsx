@@ -180,7 +180,8 @@ export default function CommentSection({ auctionId, headerRight }: CommentSectio
               onChange={(e) => setInputText(e.target.value)}
               placeholder="Add a comment..."
               maxLength={500}
-              className="min-w-0 flex-1 rounded-md border border-charcoal-light bg-jet px-3 py-2 text-sm text-cream placeholder-cream/20 outline-none transition-colors focus:border-gold/40"
+              aria-label="Add a comment"
+              className="min-w-0 flex-1 rounded-md border border-charcoal-light bg-jet px-3 py-2 text-sm text-cream placeholder-cream/20 outline-none transition-colors focus:border-gold/40 focus:ring-1 focus:ring-gold/20"
               style={{ fontFamily: "var(--font-sans)" }}
             />
             <button

@@ -254,8 +254,8 @@ body::before {
 }
 
 .focus-gold:focus {
-  border-color: rgba(198, 169, 97, 0.6);
-  box-shadow: 0 0 0 2px rgba(198, 169, 97, 0.15);
+  border-color: color-mix(in srgb, var(--color-gold) 60%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-gold) 15%, transparent);
 }
 
 @keyframes scroll-hint {
