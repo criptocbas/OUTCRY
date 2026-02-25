@@ -51,6 +51,15 @@ pub fn handle_close_auction(ctx: Context<CloseAuction>) -> Result<()> {
     // is no longer embedded in AuctionState. Bidders close their own deposit
     // accounts via claim_refund. The vault must be empty to close.
 
+    // Ensure vault has no unclaimed deposits (only rent-exempt lamports remain)
+    let vault_info = ctx.accounts.auction_vault.to_account_info();
+    let rent = Rent::get()?;
+    let vault_rent = rent.minimum_balance(vault_info.data_len());
+    require!(
+        vault_info.lamports() <= vault_rent,
+        OutcryError::OutstandingDeposits
+    );
+
     // Ensure escrow is empty (NFT already transferred or returned)
     require!(
         ctx.accounts.escrow_nft_token_account.amount == 0,
