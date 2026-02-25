@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { formatSOL } from "@/lib/utils";
 import Spinner from "@/components/ui/Spinner";
@@ -55,6 +55,8 @@ export default function BidPanel({
 
   const [bidInput, setBidInput] = useState<string>(formatSOL(minBid));
   const [userEdited, setUserEdited] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const submittingRef = useRef(false);
 
   // Update suggested bid when minBid changes (e.g. someone else bids),
   // but only if user hasn't manually typed a custom amount
@@ -64,15 +66,34 @@ export default function BidPanel({
     }
   }, [minBid, userEdited]);
 
+  // Reset confirm dialog when loading finishes (bid submitted or cancelled)
+  useEffect(() => {
+    if (!isLoading) {
+      submittingRef.current = false;
+    }
+  }, [isLoading]);
+
   const bidLamports = parseSolToLamports(bidInput);
   const depositNeeded =
     userDeposit !== null ? Math.max(0, bidLamports - userDeposit) : bidLamports;
   const hasEnoughDeposit = depositNeeded === 0;
 
-  const handleBid = () => {
+  const handleBidClick = () => {
     if (depositOnly ? bidLamports > 0 : bidLamports >= minBid) {
-      onBid(bidLamports);
+      if (depositOnly) {
+        // Deposits don't need confirmation
+        onBid(bidLamports);
+      } else {
+        setShowConfirm(true);
+      }
     }
+  };
+
+  const handleConfirmBid = () => {
+    if (submittingRef.current) return; // debounce guard
+    submittingRef.current = true;
+    setShowConfirm(false);
+    onBid(bidLamports);
   };
 
   // Quick bid buttons: min bid, +0.1, +0.5
@@ -144,42 +165,68 @@ export default function BidPanel({
                 <p className="text-center text-[11px] text-cream/30">
                   Minimum bid: {formatSOL(minBid)} SOL
                 </p>
-                {!hasEnoughDeposit && bidLamports >= minBid && (
-                  <p className="text-center text-[11px] text-gold/60">
-                    Will deposit {formatSOL(depositNeeded)} SOL first, then place bid
+                {userDeposit !== null && (
+                  <p className="text-center text-[11px] text-cream/25">
+                    Your deposit: {formatSOL(userDeposit)} SOL
+                    {!hasEnoughDeposit && bidLamports >= minBid && (
+                      <span className="text-gold/60">
+                        {" "}— needs {formatSOL(depositNeeded)} more
+                      </span>
+                    )}
                   </p>
                 )}
               </>
             )}
           </div>
 
-          {/* Bid button */}
-          <button
-            onClick={handleBid}
-            disabled={isLoading || (depositOnly ? bidLamports <= 0 : bidLamports < minBid)}
-            className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <Spinner />
-                {progressLabel && (
-                  <span className="text-xs font-medium normal-case tracking-normal">
-                    {progressLabel}
+          {/* Confirmation dialog */}
+          {showConfirm ? (
+            <div className="flex flex-col gap-2 rounded-md border border-gold/30 bg-gold/5 p-3">
+              <p className="text-center text-xs text-cream/60">
+                Bid {formatSOL(bidLamports)} SOL?
+                {!hasEnoughDeposit && (
+                  <span className="block text-gold/60 mt-0.5">
+                    Will deposit {formatSOL(depositNeeded)} SOL first
                   </span>
                 )}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  className="flex h-10 flex-1 items-center justify-center rounded-md border border-charcoal-light text-xs font-medium text-cream/50 transition-all hover:border-cream/30"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmBid}
+                  className="flex h-10 flex-1 items-center justify-center rounded-md bg-gold text-xs font-semibold tracking-[0.1em] text-jet uppercase transition-all hover:bg-gold-light"
+                >
+                  Confirm
+                </button>
               </div>
-            ) : depositOnly ? (
-              "Deposit SOL"
-            ) : (
-              "Place Bid"
-            )}
-          </button>
-
-          {/* Deposit balance */}
-          {userDeposit !== null && userDeposit > 0 && (
-            <p className="text-center text-[11px] text-cream/25">
-              Deposit balance: {formatSOL(userDeposit)} SOL (refundable)
-            </p>
+            </div>
+          ) : (
+            /* Bid button */
+            <button
+              onClick={handleBidClick}
+              disabled={isLoading || (depositOnly ? bidLamports <= 0 : bidLamports < minBid)}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Spinner />
+                  {progressLabel && (
+                    <span className="text-xs font-medium normal-case tracking-normal">
+                      {progressLabel}
+                    </span>
+                  )}
+                </div>
+              ) : depositOnly ? (
+                "Deposit SOL"
+              ) : (
+                "Place Bid"
+              )}
+            </button>
           )}
         </>
       )}

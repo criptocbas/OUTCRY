@@ -545,7 +545,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
 
       tx.feePayer = publicKey;
       const { blockhash, lastValidBlockHeight } =
-        await l1Connection.getLatestBlockhash("confirmed");
+        await l1Connection.getLatestBlockhash("finalized");
       tx.recentBlockhash = blockhash;
       tx.lastValidBlockHeight = lastValidBlockHeight;
 
@@ -578,7 +578,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
       try {
         const confirmation = await l1Connection.confirmTransaction(
           { signature: sig, blockhash, lastValidBlockHeight },
-          "confirmed"
+          "finalized"
         );
         debugLog("[settle] confirmation result:", JSON.stringify(confirmation));
 
@@ -586,7 +586,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
         if (confirmation.value.err) {
           // Fetch transaction logs for detailed error info
           const txDetails = await l1Connection.getTransaction(sig, {
-            commitment: "confirmed",
+            commitment: "finalized",
             maxSupportedTransactionVersion: 0,
           });
           const logs = txDetails?.meta?.logMessages ?? [];
