@@ -51,6 +51,9 @@ pub struct ForfeitAuction<'info> {
     )]
     pub seller: UncheckedAccount<'info>,
 
+    #[account(
+        constraint = nft_mint.key() == auction_state.nft_mint,
+    )]
     pub nft_mint: Account<'info, Mint>,
 
     #[account(

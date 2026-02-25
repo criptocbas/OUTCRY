@@ -132,6 +132,9 @@ pub struct SettleAuction<'info> {
     )]
     pub winner: UncheckedAccount<'info>,
 
+    #[account(
+        constraint = nft_mint.key() == auction_state.nft_mint,
+    )]
     pub nft_mint: Account<'info, Mint>,
 
     /// CHECK: Metaplex Token Metadata PDA — validated via cross-program seeds derivation.
