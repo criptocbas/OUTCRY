@@ -87,6 +87,7 @@ function ToastNotification({
 
   return (
     <motion.div
+      role="alert"
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -10, scale: 0.95 }}
@@ -521,8 +522,22 @@ export default function AuctionRoomPage({
           </p>
           <p className="max-w-sm text-sm text-cream/20">
             {error ||
-              "This auction may not exist or your wallet may not be connected."}
+              "This auction may not exist or the account may not be initialized yet."}
           </p>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => refetch()}
+              className="rounded-md border border-gold/30 px-4 py-2 text-xs font-medium tracking-[0.1em] text-gold uppercase transition-all hover:border-gold hover:bg-gold/5"
+            >
+              Retry
+            </button>
+            <a
+              href="/"
+              className="rounded-md border border-cream/10 px-4 py-2 text-xs font-medium tracking-[0.1em] text-cream/40 uppercase transition-all hover:border-cream/20 hover:text-cream/60"
+            >
+              Back to Discover
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -548,6 +563,17 @@ export default function AuctionRoomPage({
         transition={{ duration: 0.5 }}
         className="mx-auto max-w-7xl px-6 pt-8 pb-24"
       >
+        {/* Back link */}
+        <a
+          href="/"
+          className="mb-6 inline-flex items-center gap-1.5 text-xs text-cream/30 transition-colors hover:text-cream/60"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Discover
+        </a>
+
         {/* Two-column layout */}
         <div className="flex flex-col gap-8 lg:flex-row lg:gap-12">
           {/* ============================================================= */}
