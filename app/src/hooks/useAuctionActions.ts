@@ -115,6 +115,11 @@ function getDelegationMetadataPDA(
 const MAGIC_PROGRAM_ID = new PublicKey("Magic11111111111111111111111111111111111111");
 const MAGIC_CONTEXT_ID = new PublicKey("MagicContext1111111111111111111111111111111");
 
+// Debug logger — suppressed in production builds to avoid leaking account details
+const debugLog = process.env.NODE_ENV !== "production"
+  ? (...args: unknown[]) => console.log(...args)
+  : (() => {}) as (...args: unknown[]) => void;
+
 /**
  * Get the correct blockhash for a Magic Router transaction.
  *
@@ -480,7 +485,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
         }
       }
 
-      console.log("[settle] accounts:", {
+      debugLog("[settle] accounts:", {
         payer: publicKey.toBase58(),
         auctionState: auctionStatePubkey.toBase58(),
         auctionVault: auctionVault.toBase58(),
@@ -518,7 +523,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
           })
           .remainingAccounts(remainingAccounts)
           .transaction();
-        console.log("[settle] transaction built, instructions:", tx.instructions.length);
+        debugLog("[settle] transaction built, instructions:", tx.instructions.length);
       } catch (buildErr) {
         console.error("[settle] transaction build failed:", buildErr);
         throw new Error(`Transaction build failed: ${buildErr instanceof Error ? buildErr.message : String(buildErr)}`);
@@ -533,7 +538,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
       let signed;
       try {
         signed = await wallet.signTransaction(tx);
-        console.log("[settle] transaction signed");
+        debugLog("[settle] transaction signed");
       } catch (signErr) {
         console.error("[settle] signing failed:", signErr);
         throw new Error(`Wallet signing failed: ${signErr instanceof Error ? signErr.message : String(signErr)}`);
@@ -544,7 +549,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
         sig = await l1Connection.sendRawTransaction(signed.serialize(), {
           skipPreflight: true,
         });
-        console.log("[settle] sent, signature:", sig);
+        debugLog("[settle] sent, signature:", sig);
       } catch (sendErr: unknown) {
         console.error("[settle] sendRawTransaction failed:", sendErr);
         // Extract actual error from SendTransactionError
@@ -561,7 +566,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
           { signature: sig, blockhash, lastValidBlockHeight },
           "confirmed"
         );
-        console.log("[settle] confirmation result:", JSON.stringify(confirmation));
+        debugLog("[settle] confirmation result:", JSON.stringify(confirmation));
 
         // confirmTransaction resolves even for failed txs — must check .value.err
         if (confirmation.value.err) {
@@ -579,7 +584,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
           throw new Error(`Transaction failed: ${errorLog || JSON.stringify(confirmation.value.err)}`);
         }
 
-        console.log("[settle] confirmed successfully:", sig);
+        debugLog("[settle] confirmed successfully:", sig);
       } catch (confirmErr: unknown) {
         // Re-throw if it's our own error from above
         if (confirmErr instanceof Error && confirmErr.message.startsWith("Transaction failed:")) {
@@ -588,12 +593,12 @@ export function useAuctionActions(): UseAuctionActionsReturn {
         console.error("[settle] confirmation failed:", confirmErr);
         // Check if tx actually succeeded despite confirmation timeout
         const status = await l1Connection.getSignatureStatus(sig);
-        console.log("[settle] signature status:", JSON.stringify(status));
+        debugLog("[settle] signature status:", JSON.stringify(status));
         if (status?.value?.err) {
           throw new Error(`Transaction failed on-chain: ${JSON.stringify(status.value.err)}`);
         }
         if (status?.value?.confirmationStatus === "confirmed" || status?.value?.confirmationStatus === "finalized") {
-          console.log("[settle] transaction actually succeeded despite confirmation error");
+          debugLog("[settle] transaction actually succeeded despite confirmation error");
           return sig;
         }
         throw new Error(`Confirmation failed: ${confirmErr instanceof Error ? confirmErr.message : String(confirmErr)}`);
