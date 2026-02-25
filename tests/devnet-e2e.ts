@@ -2,11 +2,10 @@
  * OUTCRY — Devnet End-to-End Test
  *
  * Runs the full L1 auction lifecycle against the deployed program on Solana devnet.
- * No ER delegation — just the core auction flow.
+ * Tests BidderDeposit PDA architecture (no Vec-based deposits).
  *
  * Usage:
  *   npx ts-mocha -p ./tsconfig.json -t 1000000 tests/devnet-e2e.ts
- *   npx ts-node tests/devnet-e2e.ts
  *
  * Prerequisites:
  *   - Program deployed at J7r5mzvVUjSNQteoqn6Hd3LjZ3ksmwoD5xsnUvMJwPZo on devnet
@@ -20,8 +19,9 @@ import {
   Keypair,
   PublicKey,
   SystemProgram,
+  TransactionInstruction,
   LAMPORTS_PER_SOL,
-  clusterApiUrl,
+  SYSVAR_RENT_PUBKEY,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -37,12 +37,24 @@ import fs from "fs";
 import path from "path";
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Constants
 // ---------------------------------------------------------------------------
 
 const PROGRAM_ID = new PublicKey(
   "J7r5mzvVUjSNQteoqn6Hd3LjZ3ksmwoD5xsnUvMJwPZo"
 );
+
+const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
+  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+);
+
+// Use Helius for reliability, fall back to public devnet
+const DEVNET_RPC =
+  process.env.NEXT_PUBLIC_HELIUS_RPC || "https://api.devnet.solana.com";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function loadKeypair(filePath: string): Keypair {
   const resolved = filePath.replace("~", process.env.HOME || "");
@@ -64,16 +76,120 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function confirmTx(
-  connection: Connection,
-  sig: string
-): Promise<string> {
-  const latestBlockhash = await connection.getLatestBlockhash();
-  await connection.confirmTransaction(
-    { signature: sig, ...latestBlockhash },
-    "confirmed"
+function getMetadataPDA(nftMint: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+      nftMint.toBuffer(),
+    ],
+    TOKEN_METADATA_PROGRAM_ID
   );
-  return sig;
+}
+
+function getDepositPDA(
+  auctionState: PublicKey,
+  bidder: PublicKey
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("deposit"), auctionState.toBuffer(), bidder.toBuffer()],
+    PROGRAM_ID
+  );
+}
+
+/**
+ * Build a CreateMetadataAccountV3 instruction for the Token Metadata program.
+ * Constructs the Borsh-serialized instruction data manually to avoid adding
+ * @metaplex-foundation/mpl-token-metadata as a dependency.
+ */
+function createMetadataV3Instruction(
+  metadataPda: PublicKey,
+  mint: PublicKey,
+  mintAuthority: PublicKey,
+  payer: PublicKey,
+  updateAuthority: PublicKey,
+  name: string,
+  symbol: string,
+  uri: string,
+  sellerFeeBasisPoints: number,
+  creators: { address: PublicKey; verified: boolean; share: number }[]
+): TransactionInstruction {
+  // Borsh-encode the instruction data for CreateMetadataAccountV3
+  // Discriminator = 33
+  const nameBytes = Buffer.from(name, "utf-8");
+  const symbolBytes = Buffer.from(symbol, "utf-8");
+  const uriBytes = Buffer.from(uri, "utf-8");
+
+  const parts: Buffer[] = [];
+
+  // Discriminator
+  parts.push(Buffer.from([33]));
+
+  // DataV2.name (borsh string = 4-byte LE len + bytes)
+  const nameLenBuf = Buffer.alloc(4);
+  nameLenBuf.writeUInt32LE(nameBytes.length);
+  parts.push(nameLenBuf);
+  parts.push(nameBytes);
+
+  // DataV2.symbol
+  const symbolLenBuf = Buffer.alloc(4);
+  symbolLenBuf.writeUInt32LE(symbolBytes.length);
+  parts.push(symbolLenBuf);
+  parts.push(symbolBytes);
+
+  // DataV2.uri
+  const uriLenBuf = Buffer.alloc(4);
+  uriLenBuf.writeUInt32LE(uriBytes.length);
+  parts.push(uriLenBuf);
+  parts.push(uriBytes);
+
+  // DataV2.seller_fee_basis_points (u16 LE)
+  const feeBuf = Buffer.alloc(2);
+  feeBuf.writeUInt16LE(sellerFeeBasisPoints);
+  parts.push(feeBuf);
+
+  // DataV2.creators: Option<Vec<Creator>>
+  if (creators.length > 0) {
+    parts.push(Buffer.from([1])); // Some
+    const countBuf = Buffer.alloc(4);
+    countBuf.writeUInt32LE(creators.length);
+    parts.push(countBuf);
+    for (const c of creators) {
+      parts.push(c.address.toBuffer()); // 32 bytes
+      parts.push(Buffer.from([c.verified ? 1 : 0])); // 1 byte
+      parts.push(Buffer.from([c.share])); // 1 byte
+    }
+  } else {
+    parts.push(Buffer.from([0])); // None
+  }
+
+  // DataV2.collection: None
+  parts.push(Buffer.from([0]));
+
+  // DataV2.uses: None
+  parts.push(Buffer.from([0]));
+
+  // is_mutable: true
+  parts.push(Buffer.from([1]));
+
+  // collection_details: None
+  parts.push(Buffer.from([0]));
+
+  const data = Buffer.concat(parts);
+
+  return new TransactionInstruction({
+    programId: TOKEN_METADATA_PROGRAM_ID,
+    keys: [
+      { pubkey: metadataPda, isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: mintAuthority, isSigner: true, isWritable: false },
+      { pubkey: payer, isSigner: true, isWritable: true },
+      { pubkey: updateAuthority, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
 }
 
 async function fundFromWallet(
@@ -90,9 +206,11 @@ async function fundFromWallet(
     return;
   }
   console.log(
-    `    Transferring ${lamportsToSol(amount)} SOL from ${payer.publicKey.toBase58().slice(0, 8)}... to ${recipient.toBase58().slice(0, 8)}...`
+    `    Transferring ${lamportsToSol(amount)} SOL to ${recipient.toBase58().slice(0, 8)}...`
   );
-  const { Transaction, sendAndConfirmTransaction } = await import("@solana/web3.js");
+  const { Transaction, sendAndConfirmTransaction } = await import(
+    "@solana/web3.js"
+  );
   const tx = new Transaction().add(
     SystemProgram.transfer({
       fromPubkey: payer.publicKey,
@@ -112,7 +230,7 @@ describe("outcry devnet e2e", function () {
   this.timeout(600_000); // 10 minutes — devnet can be slow
 
   // Connection + provider
-  const connection = new Connection(clusterApiUrl("devnet"), {
+  const connection = new Connection(DEVNET_RPC, {
     commitment: "confirmed",
     confirmTransactionInitialTimeout: 60_000,
   });
@@ -137,14 +255,16 @@ describe("outcry devnet e2e", function () {
   let nftMint: PublicKey;
   let sellerNftAta: PublicKey;
   let auctionState: PublicKey;
+  let auctionBump: number;
   let auctionVault: PublicKey;
   let escrowNftAta: PublicKey;
+  let bidderDepositPda: PublicKey;
 
   // Auction params — small amounts to conserve devnet SOL
   const reservePrice = new BN(0.05 * LAMPORTS_PER_SOL); // 0.05 SOL
   const durationSeconds = new BN(10); // 10 seconds
-  const extensionSeconds = 5; // 5s anti-snipe extension
-  const extensionWindow = 5; // 5s window
+  const extensionSeconds = 5;
+  const extensionWindow = 5;
   const minBidIncrement = new BN(0.01 * LAMPORTS_PER_SOL); // 0.01 SOL
 
   // -----------------------------------------------------------------------
@@ -154,16 +274,20 @@ describe("outcry devnet e2e", function () {
   before(async () => {
     console.log("\n=== OUTCRY Devnet E2E Test ===");
     console.log(`  Program:  ${PROGRAM_ID.toBase58()}`);
+    console.log(`  RPC:      ${DEVNET_RPC.slice(0, 50)}...`);
     console.log(`  Seller:   ${seller.publicKey.toBase58()}`);
     console.log(`  Bidder:   ${bidder.publicKey.toBase58()}`);
-    console.log(`  Cluster:  devnet`);
     console.log("");
 
     // Check seller balance
     const sellerBal = await connection.getBalance(seller.publicKey);
     console.log(`  Seller balance: ${lamportsToSol(sellerBal)} SOL`);
+    expect(sellerBal).to.be.greaterThan(
+      1 * LAMPORTS_PER_SOL,
+      "Seller needs at least 1 SOL"
+    );
 
-    // Fund bidder from seller wallet (avoids faucet rate limits)
+    // Fund bidder from seller wallet
     await fundFromWallet(
       connection,
       seller,
@@ -171,39 +295,50 @@ describe("outcry devnet e2e", function () {
       0.5 * LAMPORTS_PER_SOL
     );
 
-    // --- Create test NFT ---
+    // --- Create test NFT (0-decimal mint = NFT) ---
     console.log("\n  Creating test NFT mint...");
     nftMint = await createMint(
       connection,
-      seller, // payer
+      seller,
       seller.publicKey, // mint authority
       null, // freeze authority
-      0 // decimals (NFT = 0)
+      0 // decimals
     );
     console.log(`    NFT Mint: ${nftMint.toBase58()}`);
 
-    // Create seller's ATA
+    // Create seller's ATA and mint 1 NFT
     sellerNftAta = await createAssociatedTokenAccount(
       connection,
       seller,
       nftMint,
       seller.publicKey
     );
-    console.log(`    Seller ATA: ${sellerNftAta.toBase58()}`);
+    await mintTo(connection, seller, nftMint, sellerNftAta, seller, 1);
+    console.log(`    Seller ATA: ${sellerNftAta.toBase58()} (balance=1)`);
 
-    // Mint 1 NFT to seller
-    const mintSig = await mintTo(
-      connection,
-      seller,
+    // --- Create Metaplex metadata (required by settle_auction for royalty parsing) ---
+    const [metadataPda] = getMetadataPDA(nftMint);
+    const metadataIx = createMetadataV3Instruction(
+      metadataPda,
       nftMint,
-      sellerNftAta,
-      seller,
-      1
+      seller.publicKey, // mint authority
+      seller.publicKey, // payer
+      seller.publicKey, // update authority
+      "Test NFT",
+      "TEST",
+      "", // no URI needed for testing
+      500, // 5% seller fee (royalty)
+      [{ address: seller.publicKey, verified: true, share: 100 }]
     );
-    console.log(`    Minted 1 NFT: ${mintSig}`);
+    const { Transaction: SolTx, sendAndConfirmTransaction: sendAndConfirm } =
+      await import("@solana/web3.js");
+    const metadataTx = new SolTx().add(metadataIx);
+    const metaSig = await sendAndConfirm(connection, metadataTx, [seller]);
+    console.log(`    Metadata PDA: ${metadataPda.toBase58()}`);
+    console.log(`    Metadata TX: ${metaSig}`);
 
     // --- Derive PDAs ---
-    [auctionState] = PublicKey.findProgramAddressSync(
+    [auctionState, auctionBump] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("auction"),
         seller.publicKey.toBuffer(),
@@ -225,6 +360,9 @@ describe("outcry devnet e2e", function () {
       true // allowOwnerOffCurve (PDA)
     );
     console.log(`    Escrow ATA: ${escrowNftAta.toBase58()}`);
+
+    [bidderDepositPda] = getDepositPDA(auctionState, bidder.publicKey);
+    console.log(`    BidderDeposit PDA: ${bidderDepositPda.toBase58()}`);
     console.log("");
   });
 
@@ -265,29 +403,26 @@ describe("outcry devnet e2e", function () {
     const auction = await program.account.auctionState.fetch(auctionState);
     expect(auction.seller.toBase58()).to.equal(seller.publicKey.toBase58());
     expect(auction.nftMint.toBase58()).to.equal(nftMint.toBase58());
-    expect(auction.reservePrice.toNumber()).to.equal(
-      reservePrice.toNumber()
-    );
+    expect(auction.reservePrice.toNumber()).to.equal(reservePrice.toNumber());
     expect(auction.currentBid.toNumber()).to.equal(0);
     expect(auction.bidCount).to.equal(0);
-    expect(auction.deposits).to.have.lengthOf(0);
     expect(JSON.stringify(auction.status)).to.equal(
       JSON.stringify({ created: {} })
     );
-    console.log(`    Status: Created`);
+    console.log(`    Status: Created ✓`);
 
     // NFT should be in escrow
     const escrowAccount = await getAccount(connection, escrowNftAta);
     expect(Number(escrowAccount.amount)).to.equal(1);
-    console.log(`    NFT escrowed: YES (escrow balance = 1)`);
+    console.log(`    NFT escrowed ✓`);
 
     const sellerAccount = await getAccount(connection, sellerNftAta);
     expect(Number(sellerAccount.amount)).to.equal(0);
-    console.log(`    Seller NFT balance: 0 (transferred)`);
+    console.log(`    Seller NFT balance: 0 ✓`);
   });
 
   // -----------------------------------------------------------------------
-  // 2. deposit — bidder deposits SOL
+  // 2. deposit — bidder deposits SOL via BidderDeposit PDA
   // -----------------------------------------------------------------------
 
   it("2. deposit — bidder deposits 0.1 SOL into vault", async () => {
@@ -301,6 +436,7 @@ describe("outcry devnet e2e", function () {
       .accountsStrict({
         bidder: bidder.publicKey,
         auctionState: auctionState,
+        bidderDeposit: bidderDepositPda,
         auctionVault: auctionVault,
         systemProgram: SystemProgram.programId,
       })
@@ -309,17 +445,18 @@ describe("outcry devnet e2e", function () {
 
     console.log(`    TX: ${tx}`);
 
-    const auction = await program.account.auctionState.fetch(auctionState);
-    expect(auction.deposits).to.have.lengthOf(1);
-    expect(auction.deposits[0].bidder.toBase58()).to.equal(
-      bidder.publicKey.toBase58()
-    );
-    expect(auction.deposits[0].amount.toNumber()).to.equal(
-      depositAmount.toNumber()
-    );
+    // Verify BidderDeposit PDA
+    const deposit = await program.account.bidderDeposit.fetch(bidderDepositPda);
+    expect(deposit.auction.toBase58()).to.equal(auctionState.toBase58());
+    expect(deposit.bidder.toBase58()).to.equal(bidder.publicKey.toBase58());
+    expect(deposit.amount.toNumber()).to.equal(depositAmount.toNumber());
     console.log(
-      `    Deposit recorded: ${lamportsToSol(auction.deposits[0].amount.toNumber())} SOL`
+      `    BidderDeposit: ${lamportsToSol(deposit.amount.toNumber())} SOL ✓`
     );
+
+    // Verify vault received SOL
+    const vaultBal = await connection.getBalance(auctionVault);
+    console.log(`    Vault balance: ${lamportsToSol(vaultBal)} SOL`);
   });
 
   // -----------------------------------------------------------------------
@@ -349,23 +486,19 @@ describe("outcry devnet e2e", function () {
       auction.startTime.toNumber()
     );
 
-    const startStr = new Date(
-      auction.startTime.toNumber() * 1000
-    ).toISOString();
     const endStr = new Date(auction.endTime.toNumber() * 1000).toISOString();
-    console.log(`    Status: Active`);
-    console.log(`    Start:  ${startStr}`);
-    console.log(`    End:    ${endStr}`);
+    console.log(`    Status: Active ✓`);
+    console.log(`    End time: ${endStr}`);
   });
 
   // -----------------------------------------------------------------------
-  // 4. place_bid — bidder bids at reserve price
+  // 4. place_bid — bidder bids at reserve price (L1, not ER)
   // -----------------------------------------------------------------------
 
   it("4. place_bid — bidder bids 0.05 SOL (reserve price)", async () => {
     const bidAmount = new BN(0.05 * LAMPORTS_PER_SOL);
     console.log(
-      `\n  [place_bid] bidder=${bidder.publicKey.toBase58().slice(0, 8)}... amount=${lamportsToSol(bidAmount.toNumber())} SOL`
+      `\n  [place_bid] amount=${lamportsToSol(bidAmount.toNumber())} SOL`
     );
 
     const tx = await program.methods
@@ -386,12 +519,10 @@ describe("outcry devnet e2e", function () {
     );
     expect(auction.bidCount).to.equal(1);
     console.log(
-      `    Current bid: ${lamportsToSol(auction.currentBid.toNumber())} SOL`
+      `    Current bid: ${lamportsToSol(auction.currentBid.toNumber())} SOL ✓`
     );
-    console.log(
-      `    Highest bidder: ${auction.highestBidder.toBase58().slice(0, 8)}...`
-    );
-    console.log(`    Bid count: ${auction.bidCount}`);
+    console.log(`    Highest bidder: ${auction.highestBidder.toBase58().slice(0, 8)}... ✓`);
+    console.log(`    Bid count: ${auction.bidCount} ✓`);
   });
 
   // -----------------------------------------------------------------------
@@ -402,22 +533,21 @@ describe("outcry devnet e2e", function () {
     const auction = await program.account.auctionState.fetch(auctionState);
     const now = Math.floor(Date.now() / 1000);
     const endTime = auction.endTime.toNumber();
-    const waitSeconds = endTime - now + 3; // +3s buffer for clock skew
+    const waitSeconds = endTime - now + 3; // +3s buffer
 
     if (waitSeconds > 0) {
       console.log(
         `\n  [wait] Auction ends at ${new Date(endTime * 1000).toISOString()}`
       );
-      console.log(`    Waiting ${waitSeconds}s for auction to expire...`);
+      console.log(`    Waiting ${waitSeconds}s...`);
       await sleep(waitSeconds * 1000);
     } else {
       console.log("\n  [wait] Auction already expired");
     }
 
-    // Verify time has passed
     const nowAfter = Math.floor(Date.now() / 1000);
     expect(nowAfter).to.be.greaterThanOrEqual(endTime);
-    console.log("    Auction timer expired.");
+    console.log("    Timer expired ✓");
   });
 
   // -----------------------------------------------------------------------
@@ -442,7 +572,7 @@ describe("outcry devnet e2e", function () {
     expect(JSON.stringify(auction.status)).to.equal(
       JSON.stringify({ ended: {} })
     );
-    console.log(`    Status: Ended`);
+    console.log(`    Status: Ended ✓`);
     console.log(
       `    Winner: ${auction.highestBidder.toBase58().slice(0, 8)}...`
     );
@@ -464,21 +594,35 @@ describe("outcry devnet e2e", function () {
       bidder.publicKey
     );
 
+    // Derive metadata PDA (Metaplex Token Metadata)
+    const [nftMetadata] = getMetadataPDA(nftMint);
+    console.log(`    NFT Metadata PDA: ${nftMetadata.toBase58()}`);
+
+    // Winner's BidderDeposit PDA
+    const [winnerDepositPda] = getDepositPDA(auctionState, bidder.publicKey);
+    console.log(`    Winner Deposit PDA: ${winnerDepositPda.toBase58()}`);
+
+    // Pass creator accounts via remainingAccounts (seller is the sole creator)
     const tx = await program.methods
       .settleAuction()
       .accountsStrict({
         payer: seller.publicKey,
         auctionState: auctionState,
         auctionVault: auctionVault,
+        winnerDeposit: winnerDepositPda,
         seller: seller.publicKey,
         winner: bidder.publicKey,
         nftMint: nftMint,
+        nftMetadata: nftMetadata,
         escrowNftTokenAccount: escrowNftAta,
         winnerNftTokenAccount: winnerNftAta,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
+      .remainingAccounts([
+        { pubkey: seller.publicKey, isSigner: false, isWritable: true },
+      ])
       .signers([seller])
       .rpc();
 
@@ -489,17 +633,17 @@ describe("outcry devnet e2e", function () {
     expect(JSON.stringify(auction.status)).to.equal(
       JSON.stringify({ settled: {} })
     );
-    console.log(`    Status: Settled`);
+    console.log(`    Status: Settled ✓`);
 
     // Verify NFT transferred to winner
     const winnerNftAccount = await getAccount(connection, winnerNftAta);
     expect(Number(winnerNftAccount.amount)).to.equal(1);
-    console.log(`    Winner NFT balance: 1 (received)`);
+    console.log(`    Winner NFT balance: 1 ✓`);
 
     // Verify escrow is empty
     const escrowAccount = await getAccount(connection, escrowNftAta);
     expect(Number(escrowAccount.amount)).to.equal(0);
-    console.log(`    Escrow NFT balance: 0 (transferred)`);
+    console.log(`    Escrow NFT balance: 0 ✓`);
 
     // Verify seller received SOL
     const sellerBalAfter = await connection.getBalance(seller.publicKey);
@@ -507,20 +651,13 @@ describe("outcry devnet e2e", function () {
     console.log(
       `    Seller balance change: ${sellerGain > 0 ? "+" : ""}${lamportsToSol(sellerGain)} SOL`
     );
-    // Seller should gain roughly the winning bid minus tx fee for settle
-    // The winning bid is 0.05 SOL. Tx fee is ~0.000005 SOL + ATA creation cost.
-    // Since seller also pays the tx fee and possibly ATA init, the net gain could
-    // be slightly less, but should still be positive.
 
-    // Verify winner's deposit was deducted
-    const winnerDeposit = auction.deposits.find(
-      (d: any) => d.bidder.toBase58() === bidder.publicKey.toBase58()
-    );
-    const expectedRemaining =
-      0.1 * LAMPORTS_PER_SOL - 0.05 * LAMPORTS_PER_SOL; // 0.05 SOL
-    expect(winnerDeposit.amount.toNumber()).to.equal(expectedRemaining);
+    // Verify winner's deposit was deducted (0.1 - 0.05 = 0.05 remaining)
+    const deposit = await program.account.bidderDeposit.fetch(winnerDepositPda);
+    const expectedRemaining = 0.05 * LAMPORTS_PER_SOL;
+    expect(deposit.amount.toNumber()).to.equal(expectedRemaining);
     console.log(
-      `    Winner remaining deposit: ${lamportsToSol(winnerDeposit.amount.toNumber())} SOL`
+      `    Winner remaining deposit: ${lamportsToSol(deposit.amount.toNumber())} SOL ✓`
     );
   });
 
@@ -538,6 +675,7 @@ describe("outcry devnet e2e", function () {
       .accountsStrict({
         bidder: bidder.publicKey,
         auctionState: auctionState,
+        bidderDeposit: bidderDepositPda,
         auctionVault: auctionVault,
         systemProgram: SystemProgram.programId,
       })
@@ -549,18 +687,58 @@ describe("outcry devnet e2e", function () {
     const bidderBalAfter = await connection.getBalance(bidder.publicKey);
     const refund = bidderBalAfter - bidderBalBefore;
     console.log(
-      `    Bidder balance change: ${refund > 0 ? "+" : ""}${lamportsToSol(refund)} SOL`
+      `    Bidder balance change: +${lamportsToSol(refund)} SOL`
     );
     // Should receive ~0.05 SOL back minus tx fee
     expect(refund).to.be.greaterThan(0.04 * LAMPORTS_PER_SOL);
+    console.log(`    Refund received ✓`);
 
     // Deposit should be zeroed
-    const auction = await program.account.auctionState.fetch(auctionState);
-    const deposit = auction.deposits.find(
-      (d: any) => d.bidder.toBase58() === bidder.publicKey.toBase58()
-    );
+    const deposit = await program.account.bidderDeposit.fetch(bidderDepositPda);
     expect(deposit.amount.toNumber()).to.equal(0);
-    console.log(`    Deposit after refund: 0 SOL`);
+    console.log(`    Deposit after refund: 0 SOL ✓`);
+  });
+
+  // -----------------------------------------------------------------------
+  // 9. close_auction — reclaim rent
+  // -----------------------------------------------------------------------
+
+  it("9. close_auction — seller reclaims rent from accounts", async () => {
+    console.log("\n  [close_auction]");
+
+    const sellerBalBefore = await connection.getBalance(seller.publicKey);
+
+    const tx = await program.methods
+      .closeAuction()
+      .accountsStrict({
+        seller: seller.publicKey,
+        auctionState: auctionState,
+        auctionVault: auctionVault,
+        nftMint: nftMint,
+        escrowNftTokenAccount: escrowNftAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([seller])
+      .rpc();
+
+    console.log(`    TX: ${tx}`);
+
+    const sellerBalAfter = await connection.getBalance(seller.publicKey);
+    const rentRecovered = sellerBalAfter - sellerBalBefore;
+    console.log(
+      `    Rent recovered: +${lamportsToSol(rentRecovered)} SOL`
+    );
+    expect(rentRecovered).to.be.greaterThan(0);
+    console.log(`    Accounts closed ✓`);
+
+    // Verify accounts are gone
+    const auctionInfo = await connection.getAccountInfo(auctionState);
+    expect(auctionInfo).to.be.null;
+    console.log(`    AuctionState: null ✓`);
+
+    const vaultInfo = await connection.getAccountInfo(auctionVault);
+    expect(vaultInfo).to.be.null;
+    console.log(`    AuctionVault: null ✓`);
   });
 
   // -----------------------------------------------------------------------
@@ -571,9 +749,12 @@ describe("outcry devnet e2e", function () {
     console.log("\n=== Devnet E2E Complete ===");
     console.log(`  NFT Mint:       ${nftMint?.toBase58()}`);
     console.log(`  AuctionState:   ${auctionState?.toBase58()}`);
-    console.log(`  Seller balance: ${lamportsToSol(await connection.getBalance(seller.publicKey))} SOL`);
-    console.log(`  Bidder balance: ${lamportsToSol(await connection.getBalance(bidder.publicKey))} SOL`);
+    console.log(
+      `  Seller balance: ${lamportsToSol(await connection.getBalance(seller.publicKey))} SOL`
+    );
+    console.log(
+      `  Bidder balance: ${lamportsToSol(await connection.getBalance(bidder.publicKey))} SOL`
+    );
     console.log("");
   });
 });
-
