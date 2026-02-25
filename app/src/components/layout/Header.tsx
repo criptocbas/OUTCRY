@@ -19,7 +19,16 @@ export default function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Close mobile nav on route change (link click)
+  // Close mobile nav on ESC key
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
   const closeMobile = () => setMobileOpen(false);
 
   return (
@@ -29,23 +38,17 @@ export default function Header() {
       transition={{ duration: 0.6, ease: "easeOut" }}
       className={`fixed top-0 left-0 right-0 z-50 border-b transition-all duration-300 ${
         scrolled
-          ? "border-[#C6A961]/40 bg-[#050505]/80 backdrop-blur-xl"
-          : "border-[#C6A961]/20 bg-[#050505]/95"
+          ? "border-gold/40 bg-jet/80 backdrop-blur-xl"
+          : "border-gold/20 bg-jet/95"
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         {/* Left: Logotype */}
         <Link href="/" className="flex flex-col items-start leading-none">
-          <span
-            className="text-2xl font-bold italic text-[#C6A961]"
-            style={{ fontFamily: "'Playfair Display', serif" }}
-          >
+          <span className="font-serif text-2xl font-bold italic text-gold">
             OUTCRY
           </span>
-          <span
-            className="text-[9px] tracking-[0.3em] text-[#F5F0E8]/50 uppercase"
-            style={{ fontFamily: "'DM Sans', sans-serif" }}
-          >
+          <span className="font-sans text-[9px] tracking-[0.3em] text-cream/50 uppercase">
             Live Auctions
           </span>
         </Link>
@@ -71,10 +74,10 @@ export default function Header() {
             <WalletMultiButton
               style={{
                 backgroundColor: "transparent",
-                border: "1px solid rgba(198,169,97,0.4)",
+                border: "1px solid var(--color-gold-dark)",
                 borderRadius: "6px",
-                color: "#C6A961",
-                fontFamily: "'DM Sans', sans-serif",
+                color: "var(--color-gold)",
+                fontFamily: "var(--font-sans)",
                 fontSize: "13px",
                 fontWeight: 500,
                 height: "36px",
@@ -89,7 +92,7 @@ export default function Header() {
           {/* Hamburger — mobile only */}
           <button
             onClick={() => setMobileOpen((v) => !v)}
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-[#C6A961]/30 text-[#C6A961] transition-colors hover:bg-[#C6A961]/10 sm:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-md border border-gold/30 text-gold transition-colors hover:bg-gold/10 sm:hidden"
             aria-label="Toggle menu"
           >
             <svg
@@ -117,7 +120,7 @@ export default function Header() {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="overflow-hidden border-t border-[#C6A961]/10 bg-[#050505]/95 backdrop-blur-xl sm:hidden"
+            className="overflow-hidden border-t border-gold/10 bg-jet/95 backdrop-blur-xl sm:hidden"
           >
             <div className="flex flex-col gap-1 px-6 py-4">
               <MobileNavLink href="/#auctions" onClick={closeMobile}>Discover</MobileNavLink>
@@ -137,7 +140,7 @@ export default function Header() {
 
 function NavSlash() {
   return (
-    <span className="text-[10px] text-[#C6A961]/40 select-none">/</span>
+    <span className="text-[10px] text-gold/40 select-none">/</span>
   );
 }
 
@@ -151,8 +154,7 @@ function NavLink({
   return (
     <Link
       href={href}
-      className="text-xs tracking-[0.15em] text-[#F5F0E8]/70 uppercase transition-colors duration-200 hover:text-[#C6A961]"
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
+      className="font-sans text-xs tracking-[0.15em] text-cream/70 uppercase transition-colors duration-200 hover:text-gold"
     >
       {children}
     </Link>
@@ -172,8 +174,7 @@ function MobileNavLink({
     <Link
       href={href}
       onClick={onClick}
-      className="rounded-md px-3 py-2.5 text-sm tracking-[0.1em] text-[#F5F0E8]/70 uppercase transition-colors duration-200 hover:bg-[#C6A961]/10 hover:text-[#C6A961]"
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
+      className="font-sans rounded-md px-3 py-2.5 text-sm tracking-[0.1em] text-cream/70 uppercase transition-colors duration-200 hover:bg-gold/10 hover:text-gold"
     >
       {children}
     </Link>

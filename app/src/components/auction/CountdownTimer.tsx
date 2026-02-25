@@ -37,25 +37,19 @@ export default function CountdownTimer({ endTime, status }: CountdownTimerProps)
 
     const statusColor =
       status === "created"
-        ? "text-[#F5F0E8]/60"
+        ? "text-cream/60"
         : status === "settled"
           ? "text-emerald-400"
           : status === "cancelled"
             ? "text-red-400/70"
-            : "text-[#C6A961]";
+            : "text-gold";
 
     return (
-      <div className="flex flex-col items-center">
-        <span
-          className="mb-1 text-[10px] tracking-[0.25em] text-[#F5F0E8]/40 uppercase"
-          style={{ fontFamily: "'DM Sans', sans-serif" }}
-        >
+      <div className="flex flex-col items-center" role="timer" aria-live="polite">
+        <span className="mb-1 font-sans text-[10px] tracking-[0.25em] text-cream/40 uppercase">
           Auction Status
         </span>
-        <span
-          className={`text-2xl font-bold tracking-wider ${statusColor}`}
-          style={{ fontFamily: "'Playfair Display', serif" }}
-        >
+        <span className={`font-serif text-2xl font-bold tracking-wider ${statusColor}`}>
           {statusLabel}
         </span>
       </div>
@@ -72,16 +66,13 @@ export default function CountdownTimer({ endTime, status }: CountdownTimerProps)
   const isUrgent = timeLeft < 60;
   const isWarning = timeLeft < 300;
 
-  let digitColor = "text-[#F5F0E8]";
-  if (isUrgent) digitColor = "text-[#DC2626]";
-  else if (isWarning) digitColor = "text-[#E8A317]";
+  let digitColor = "text-cream";
+  if (isUrgent) digitColor = "text-red-600";
+  else if (isWarning) digitColor = "text-amber-500";
 
   return (
-    <div className="flex flex-col items-center">
-      <span
-        className="mb-2 text-[10px] tracking-[0.25em] text-[#F5F0E8]/40 uppercase"
-        style={{ fontFamily: "'DM Sans', sans-serif" }}
-      >
+    <div className="flex flex-col items-center" role="timer" aria-live="polite">
+      <span className="mb-2 font-sans text-[10px] tracking-[0.25em] text-cream/40 uppercase">
         Time Remaining
       </span>
       <div
@@ -109,16 +100,10 @@ function TimeSegment({
 }) {
   return (
     <div className="flex items-baseline">
-      <span
-        className={`text-3xl font-semibold tabular-nums ${color}`}
-        style={{ fontFamily: "'DM Sans', sans-serif", fontVariantNumeric: "tabular-nums" }}
-      >
+      <span className={`font-sans text-3xl font-semibold tabular-nums ${color}`}>
         {value}
       </span>
-      <span
-        className="ml-0.5 text-[10px] text-[#F5F0E8]/30 uppercase"
-        style={{ fontFamily: "'DM Sans', sans-serif" }}
-      >
+      <span className="ml-0.5 font-sans text-[10px] text-cream/30 uppercase">
         {label}
       </span>
     </div>
@@ -127,10 +112,7 @@ function TimeSegment({
 
 function Separator({ color }: { color: string }) {
   return (
-    <span
-      className={`mx-0.5 text-xl font-light ${color} opacity-40`}
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
-    >
+    <span className={`mx-0.5 font-sans text-xl font-light ${color} opacity-40`}>
       :
     </span>
   );
