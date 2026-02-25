@@ -41,6 +41,7 @@ pub struct AuctionSettled {
     pub final_price: u64,
     pub seller_received: u64,
     pub royalties_paid: u64,
+    pub protocol_fee: u64,
 }
 
 #[event]

@@ -48,4 +48,6 @@ pub enum OutcryError {
     MissingCreatorAccount,
     #[msg("Forfeit not needed — winner has sufficient deposit for the winning bid")]
     ForfeitNotNeeded,
+    #[msg("Invalid protocol treasury account")]
+    InvalidTreasury,
 }

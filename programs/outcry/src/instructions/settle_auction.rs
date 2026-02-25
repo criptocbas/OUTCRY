@@ -132,6 +132,13 @@ pub struct SettleAuction<'info> {
     )]
     pub winner: UncheckedAccount<'info>,
 
+    /// CHECK: Protocol treasury — constrained to the hardcoded PROTOCOL_TREASURY address
+    #[account(
+        mut,
+        constraint = protocol_treasury.key() == PROTOCOL_TREASURY @ OutcryError::InvalidTreasury,
+    )]
+    pub protocol_treasury: UncheckedAccount<'info>,
+
     #[account(
         constraint = nft_mint.key() == auction_state.nft_mint,
     )]
@@ -237,9 +244,25 @@ pub fn handle_settle_auction(ctx: Context<SettleAuction>) -> Result<()> {
         }
     }
 
-    // --- Send remainder to seller (winning bid minus royalties) ---
+    // --- Calculate and transfer protocol fee ---
+    let protocol_fee = (winning_bid as u128)
+        .checked_mul(PROTOCOL_FEE_BPS as u128)
+        .ok_or(OutcryError::ArithmeticOverflow)?
+        .checked_div(10_000)
+        .ok_or(OutcryError::ArithmeticOverflow)? as u64;
+
+    if protocol_fee > 0 {
+        let vault_info = ctx.accounts.auction_vault.to_account_info();
+        let treasury_info = ctx.accounts.protocol_treasury.to_account_info();
+        **vault_info.try_borrow_mut_lamports()? -= protocol_fee;
+        **treasury_info.try_borrow_mut_lamports()? += protocol_fee;
+    }
+
+    // --- Send remainder to seller (winning bid minus royalties minus protocol fee) ---
     let seller_receives = winning_bid
         .checked_sub(distributed_royalties)
+        .ok_or(OutcryError::ArithmeticOverflow)?
+        .checked_sub(protocol_fee)
         .ok_or(OutcryError::ArithmeticOverflow)?;
 
     let vault_info = ctx.accounts.auction_vault.to_account_info();
@@ -278,6 +301,7 @@ pub fn handle_settle_auction(ctx: Context<SettleAuction>) -> Result<()> {
         final_price: winning_bid,
         seller_received: seller_receives,
         royalties_paid: distributed_royalties,
+        protocol_fee,
     });
 
     Ok(())

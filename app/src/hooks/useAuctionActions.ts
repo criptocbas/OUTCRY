@@ -14,7 +14,7 @@ import {
 import BN from "bn.js";
 import { getProgram, getAuctionPDA, getVaultPDA, getDepositPDA, getMetadataPDA, parseMetadataCreators } from "@/lib/program";
 import { getMagicConnection } from "@/lib/magic-router";
-import { PROGRAM_ID, DELEGATION_PROGRAM_ID, DEVNET_RPC } from "@/lib/constants";
+import { PROGRAM_ID, DELEGATION_PROGRAM_ID, DEVNET_RPC, PROTOCOL_TREASURY } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -498,6 +498,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
             winnerDeposit,
             seller,
             winner,
+            protocolTreasury: PROTOCOL_TREASURY,
             nftMint,
             nftMetadata,
             escrowNftTokenAccount,

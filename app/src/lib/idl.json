@@ -1550,6 +1550,10 @@
           "writable": true
         },
         {
+          "name": "protocol_treasury",
+          "writable": true
+        },
+        {
           "name": "nft_mint"
         },
         {
@@ -2203,6 +2207,11 @@
       "code": 6022,
       "name": "ForfeitNotNeeded",
       "msg": "Forfeit not needed — winner has sufficient deposit for the winning bid"
+    },
+    {
+      "code": 6023,
+      "name": "InvalidTreasury",
+      "msg": "Invalid protocol treasury account"
     }
   ],
   "types": [
@@ -2297,6 +2306,10 @@
           },
           {
             "name": "royalties_paid",
+            "type": "u64"
+          },
+          {
+            "name": "protocol_fee",
             "type": "u64"
           }
         ]

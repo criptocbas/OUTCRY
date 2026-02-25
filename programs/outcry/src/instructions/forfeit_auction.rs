@@ -151,6 +151,7 @@ pub fn handle_forfeit_auction(ctx: Context<ForfeitAuction>) -> Result<()> {
         final_price: 0, // No sale — winner defaulted
         seller_received: winner_deposit_amount, // Forfeited deposit as penalty
         royalties_paid: 0,
+        protocol_fee: 0,
     });
 
     Ok(())

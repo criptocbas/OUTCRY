@@ -48,6 +48,10 @@ const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 );
 
+const PROTOCOL_TREASURY = new PublicKey(
+  "B6MtVeqn7BrJ8HTX6CeP8VugNWyCqqbfcDMxYBknzPt7"
+);
+
 // Use Helius for reliability, fall back to public devnet
 const DEVNET_RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC || "https://api.devnet.solana.com";
@@ -585,7 +589,7 @@ describe("outcry devnet e2e", function () {
   // 7. settle_auction — NFT to winner, SOL to seller
   // -----------------------------------------------------------------------
 
-  it("7. settle_auction — transfers NFT to winner, SOL to seller", async () => {
+  it("7. settle_auction — transfers NFT to winner, SOL to seller, fees to treasury", async () => {
     console.log("\n  [settle_auction]");
 
     const sellerBalBefore = await connection.getBalance(seller.publicKey);
@@ -612,6 +616,7 @@ describe("outcry devnet e2e", function () {
         winnerDeposit: winnerDepositPda,
         seller: seller.publicKey,
         winner: bidder.publicKey,
+        protocolTreasury: PROTOCOL_TREASURY,
         nftMint: nftMint,
         nftMetadata: nftMetadata,
         escrowNftTokenAccount: escrowNftAta,
@@ -645,12 +650,31 @@ describe("outcry devnet e2e", function () {
     expect(Number(escrowAccount.amount)).to.equal(0);
     console.log(`    Escrow NFT balance: 0 ✓`);
 
-    // Verify seller received SOL
+    // Verify settlement math:
+    // winning_bid = 0.05 SOL = 50,000,000 lamports
+    // royalties   = 50,000,000 × 500/10000 = 2,500,000 (5% to creator = seller)
+    // protocol_fee = 50,000,000 × 250/10000 = 1,250,000 (2.5% to treasury = seller)
+    // seller_receives = 50,000,000 - 2,500,000 - 1,250,000 = 46,250,000
+    //
+    // NOTE: seller == creator == treasury in this test, so total inflow to seller:
+    // 46,250,000 + 2,500,000 + 1,250,000 = 50,000,000 (the full winning bid)
+    // Net change = 50,000,000 - tx_fee - winner_ATA_rent
     const sellerBalAfter = await connection.getBalance(seller.publicKey);
     const sellerGain = sellerBalAfter - sellerBalBefore;
+    const expectedProtocolFee = 1_250_000;
+    const expectedRoyalties = 2_500_000;
+    const expectedSellerReceives = 46_250_000;
     console.log(
-      `    Seller balance change: ${sellerGain > 0 ? "+" : ""}${lamportsToSol(sellerGain)} SOL`
+      `    Expected: seller_receives=${lamportsToSol(expectedSellerReceives)}, royalties=${lamportsToSol(expectedRoyalties)}, protocol_fee=${lamportsToSol(expectedProtocolFee)} SOL`
     );
+    console.log(
+      `    Seller/Treasury net change: ${sellerGain > 0 ? "+" : ""}${lamportsToSol(sellerGain)} SOL`
+    );
+    // seller == treasury == creator, so they receive the full winning bid minus tx costs
+    // Approximate check: gain should be close to 0.05 SOL (minus tx fee + ATA rent)
+    expect(sellerGain).to.be.greaterThan(0.045 * LAMPORTS_PER_SOL);
+    expect(sellerGain).to.be.lessThanOrEqual(0.05 * LAMPORTS_PER_SOL);
+    console.log(`    Settlement math verified ✓`);
 
     // Verify winner's deposit was deducted (0.1 - 0.05 = 0.05 remaining)
     const deposit = await program.account.bidderDeposit.fetch(winnerDepositPda);

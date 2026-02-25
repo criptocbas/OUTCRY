@@ -55,6 +55,10 @@ const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 );
 
+const PROTOCOL_TREASURY = new PublicKey(
+  "B6MtVeqn7BrJ8HTX6CeP8VugNWyCqqbfcDMxYBknzPt7"
+);
+
 const DELEGATION_PROGRAM_ID = new PublicKey(
   "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
 );
@@ -800,7 +804,7 @@ describe("outcry devnet ER e2e", function () {
   // 9. settle_auction (L1)
   // -----------------------------------------------------------------------
 
-  it("9. settle_auction (L1) — transfers NFT to winner, SOL to seller", async () => {
+  it("9. settle_auction (L1) — transfers NFT to winner, SOL to seller, fees to treasury", async () => {
     console.log("\n  [settle_auction]");
 
     const sellerBalBefore = await connection.getBalance(seller.publicKey);
@@ -821,6 +825,7 @@ describe("outcry devnet ER e2e", function () {
         winnerDeposit: winnerDepositPda,
         seller: seller.publicKey,
         winner: bidder.publicKey,
+        protocolTreasury: PROTOCOL_TREASURY,
         nftMint: nftMint,
         nftMetadata: nftMetadata,
         escrowNftTokenAccount: escrowNftAta,
@@ -847,11 +852,18 @@ describe("outcry devnet ER e2e", function () {
     expect(Number(winnerNftAccount.amount)).to.equal(1);
     console.log(`    Winner NFT balance: 1 ✓`);
 
+    // Verify settlement math:
+    // winning_bid = 0.05 SOL, royalties = 5% = 2,500,000, protocol_fee = 2.5% = 1,250,000
+    // seller_receives = 50,000,000 - 2,500,000 - 1,250,000 = 46,250,000
+    // NOTE: seller == creator == treasury in this test, so combined inflow = 50,000,000
     const sellerBalAfter = await connection.getBalance(seller.publicKey);
     const sellerGain = sellerBalAfter - sellerBalBefore;
     console.log(
-      `    Seller balance change: ${sellerGain > 0 ? "+" : ""}${lamportsToSol(sellerGain)} SOL`
+      `    Seller/Treasury net change: ${sellerGain > 0 ? "+" : ""}${lamportsToSol(sellerGain)} SOL`
     );
+    expect(sellerGain).to.be.greaterThan(0.045 * LAMPORTS_PER_SOL);
+    expect(sellerGain).to.be.lessThanOrEqual(0.05 * LAMPORTS_PER_SOL);
+    console.log(`    Settlement math verified ✓`);
 
     const deposit = await l1Program.account.bidderDeposit.fetch(
       winnerDepositPda

@@ -160,15 +160,18 @@ export default function AuctionRoomPage({
       setBidFlash(true);
       setTimeout(() => setBidFlash(false), 800);
 
-      // Accumulate into history
-      setBidHistory(prev => [
-        ...prev,
-        {
-          bidder: currentBidder,
-          amount: currentBid,
-          timestamp: Math.floor(Date.now() / 1000),
-        },
-      ]);
+      // Accumulate into history (deduplicate by amount — bids are strictly increasing)
+      setBidHistory(prev => {
+        if (prev.some(b => b.amount === currentBid)) return prev;
+        return [
+          ...prev,
+          {
+            bidder: currentBidder,
+            amount: currentBid,
+            timestamp: Math.floor(Date.now() / 1000),
+          },
+        ];
+      });
 
       // Check if user was outbid
       if (

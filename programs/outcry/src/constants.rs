@@ -1,6 +1,14 @@
 use anchor_lang::prelude::Pubkey;
 
-pub const PROTOCOL_FEE_BPS: u16 = 0; // 0% for hackathon; would be 250 (2.5%) in production
+pub const PROTOCOL_FEE_BPS: u16 = 250; // 2.5%
+
+/// Protocol treasury — receives protocol fees at settlement.
+pub const PROTOCOL_TREASURY: Pubkey = Pubkey::new_from_array([
+    149, 244, 100, 41, 6, 97, 224, 199,
+    172, 148, 20, 37, 51, 40, 133, 116,
+    76, 82, 205, 162, 197, 14, 242, 115,
+    151, 186, 63, 255, 146, 232, 88, 68,
+]);
 
 /// Metaplex Token Metadata program ID (for cross-program PDA validation).
 /// Defined as a plain constant to avoid `declare_id!` polluting the Anchor IDL.
