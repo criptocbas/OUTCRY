@@ -90,6 +90,9 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
   // Overlap guard — prevents concurrent polling fetches
   const fetchingRef = useRef(false);
 
+  // Track last WebSocket update time — polling only kicks in when WS is stale
+  const lastWsUpdateRef = useRef(0);
+
   const fetchAuction = useCallback(async () => {
     if (!auctionPublicKey) {
       setAuction(null);
@@ -151,6 +154,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
             accountInfo.data
           );
           setAuction(decoded as unknown as AuctionAccount);
+          lastWsUpdateRef.current = Date.now();
         } catch (err) {
           // If decoding fails (e.g. account closed or data changed), log it
           console.warn("Subscription decode error:", err);
@@ -169,15 +173,17 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
     };
   }, [auctionPublicKey, wallet, connection]);
 
-  // Polling fallback: Magic Router WebSocket may not relay ER account changes,
-  // so poll every 3 seconds to keep the UI in sync during active auctions.
+  // Polling fallback: Magic Router WebSocket may not relay ER account changes.
+  // Only polls when WebSocket hasn't delivered an update in 5+ seconds.
   useEffect(() => {
     if (!auctionPublicKey) return;
 
     const interval = setInterval(() => {
       if (fetchingRef.current) return;
+      // Skip polling if WebSocket recently delivered an update
+      if (Date.now() - lastWsUpdateRef.current < 5000) return;
       fetchAuction();
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [auctionPublicKey, wallet, fetchAuction]);
