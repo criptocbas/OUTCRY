@@ -1,6 +1,6 @@
 import { AnchorProvider, Program } from "@coral-xyz/anchor";
 import type { Idl } from "@coral-xyz/anchor";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import type { AnchorWallet } from "@solana/wallet-adapter-react";
 import { PROGRAM_ID, AUCTION_SEED, VAULT_SEED, DEPOSIT_SEED, TOKEN_METADATA_PROGRAM_ID } from "./constants";
 import idl from "./idl.json";
@@ -21,6 +21,21 @@ export function getProgram(
     preflightCommitment: "confirmed",
   });
   return new Program(idl as Idl, provider);
+}
+
+/** Dummy wallet that satisfies AnchorWallet for read-only operations. */
+const DUMMY_WALLET: AnchorWallet = {
+  publicKey: Keypair.generate().publicKey,
+  signTransaction: () => { throw new Error("Read-only: wallet not connected"); },
+  signAllTransactions: () => { throw new Error("Read-only: wallet not connected"); },
+};
+
+/**
+ * Creates a read-only Anchor Program instance (no wallet required).
+ * Can fetch/decode accounts but cannot sign transactions.
+ */
+export function getReadOnlyProgram(connection: Connection): Program {
+  return getProgram(connection, DUMMY_WALLET);
 }
 
 /**

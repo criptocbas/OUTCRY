@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAnchorWallet } from "@solana/wallet-adapter-react";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getProgram } from "@/lib/program";
+import { getProgram, getReadOnlyProgram } from "@/lib/program";
 import { getMagicConnection } from "@/lib/magic-router";
 import { DEVNET_RPC, DELEGATION_PROGRAM_ID } from "@/lib/constants";
 import type { AuctionAccount, AuctionStatusLabel } from "./useAuction";
@@ -59,17 +59,12 @@ export function useAuctions(): UseAuctionsReturn {
   const [error, setError] = useState<string | null>(null);
 
   const fetchAuctions = useCallback(async () => {
-    if (!wallet) {
-      setAuctions([]);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
       // Step 1: Get non-delegated auction accounts from L1 (owned by OUTCRY program)
-      const l1Program = getProgram(l1Connection, wallet);
+      const l1Program = wallet ? getProgram(l1Connection, wallet) : getReadOnlyProgram(l1Connection);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const l1Accounts = await (l1Program.account as any).auctionState.all();
 
@@ -115,7 +110,7 @@ export function useAuctions(): UseAuctionsReturn {
 
       // Step 4: Re-fetch each account via Magic Router to get latest state
       // (delegated accounts will return ER state, others return L1 state)
-      const magicProgram = getProgram(magicConnection, wallet);
+      const magicProgram = wallet ? getProgram(magicConnection, wallet) : getReadOnlyProgram(magicConnection);
       const results = await Promise.all(
         allKeys.map(async (pk) => {
           try {

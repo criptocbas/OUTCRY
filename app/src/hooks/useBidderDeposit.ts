@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAnchorWallet } from "@solana/wallet-adapter-react";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getProgram, getDepositPDA } from "@/lib/program";
+import { getProgram, getReadOnlyProgram, getDepositPDA } from "@/lib/program";
 import { DEVNET_RPC } from "@/lib/constants";
 import type BN from "bn.js";
 
@@ -35,14 +35,14 @@ export function useBidderDeposit(
   const [loading, setLoading] = useState(false);
 
   const fetchDeposit = useCallback(async () => {
-    if (!auctionPublicKey || !bidderPublicKey || !wallet) {
+    if (!auctionPublicKey || !bidderPublicKey) {
       setDeposit(null);
       return;
     }
 
     setLoading(true);
     try {
-      const program = getProgram(connection, wallet);
+      const program = wallet ? getProgram(connection, wallet) : getReadOnlyProgram(connection);
       const auctionPk = new PublicKey(auctionPublicKey);
       const bidderPk = new PublicKey(bidderPublicKey);
       const [depositPda] = getDepositPDA(auctionPk, bidderPk);

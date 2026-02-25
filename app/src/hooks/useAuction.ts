@@ -6,7 +6,7 @@ import { PublicKey } from "@solana/web3.js";
 import type { AccountInfo } from "@solana/web3.js";
 import { Program } from "@coral-xyz/anchor";
 import type BN from "bn.js";
-import { getProgram } from "@/lib/program";
+import { getProgram, getReadOnlyProgram } from "@/lib/program";
 import { getMagicConnection } from "@/lib/magic-router";
 
 // ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
   const fetchingRef = useRef(false);
 
   const fetchAuction = useCallback(async () => {
-    if (!auctionPublicKey || !wallet) {
+    if (!auctionPublicKey) {
       setAuction(null);
       return;
     }
@@ -104,7 +104,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
 
     fetchingRef.current = true;
     try {
-      const program = getProgram(connection, wallet);
+      const program = wallet ? getProgram(connection, wallet) : getReadOnlyProgram(connection);
       programRef.current = program;
       const pubkey = new PublicKey(auctionPublicKey);
       const account = await (program.account as Record<string, { fetch: (key: PublicKey) => Promise<unknown> }>)["auctionState"].fetch(pubkey);
@@ -128,9 +128,9 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
 
   // Real-time subscription via onAccountChange (works on L1, may not work on ER)
   useEffect(() => {
-    if (!auctionPublicKey || !wallet) return;
+    if (!auctionPublicKey) return;
 
-    const program = getProgram(connection, wallet);
+    const program = wallet ? getProgram(connection, wallet) : getReadOnlyProgram(connection);
     programRef.current = program;
 
     let pubkey: PublicKey;
@@ -171,7 +171,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
   // Polling fallback: Magic Router WebSocket may not relay ER account changes,
   // so poll every 3 seconds to keep the UI in sync during active auctions.
   useEffect(() => {
-    if (!auctionPublicKey || !wallet) return;
+    if (!auctionPublicKey) return;
 
     const interval = setInterval(() => {
       if (fetchingRef.current) return;
