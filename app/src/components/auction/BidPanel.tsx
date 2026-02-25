@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 
 const MIN_BID_INCREMENT_LAMPORTS = 100_000_000; // 0.1 SOL
 
@@ -12,6 +13,8 @@ interface AuctionState {
 }
 
 interface BidPanelProps {
+  /** HTML id for scroll targeting (e.g. mobile sticky bar) */
+  id?: string;
   auctionState: AuctionState;
   /** Single action: handles deposit (if needed) + bid in one flow */
   onBid: (bidLamports: number) => void;
@@ -35,6 +38,7 @@ function parseSolToLamports(sol: string): number {
 }
 
 export default function BidPanel({
+  id,
   auctionState,
   onBid,
   isLoading,
@@ -43,6 +47,8 @@ export default function BidPanel({
   progressLabel,
   depositOnly = false,
 }: BidPanelProps) {
+  const { connected } = useWallet();
+
   const minBid = useMemo(() => {
     if (auctionState.currentBid > 0) {
       return auctionState.currentBid + MIN_BID_INCREMENT_LAMPORTS;
@@ -85,11 +91,15 @@ export default function BidPanel({
   }, [minBid]);
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-charcoal-light bg-charcoal p-5">
+    <div id={id} className="flex flex-col gap-4 rounded-lg border border-charcoal-light bg-charcoal p-5">
       {/* Seller message */}
       {isSeller ? (
         <p className="text-center text-xs text-cream/40">
           You are the seller — you cannot bid on your own auction.
+        </p>
+      ) : !connected ? (
+        <p className="text-center text-xs text-cream/40 py-2">
+          Connect your wallet to place a bid.
         </p>
       ) : (
         <>

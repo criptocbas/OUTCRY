@@ -123,6 +123,7 @@ export default function AuctionRoomPage({
   const [actionLoading, setActionLoading] = useState(false);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [bidFlash, setBidFlash] = useState(false);
+  const [settleConfirm, setSettleConfirm] = useState(false);
   const [prevBid, setPrevBid] = useState<number | null>(null);
   const [prevHighestBidder, setPrevHighestBidder] = useState<string | null>(null);
   const [bidHistory, setBidHistory] = useState<Array<{ bidder: string; amount: number; timestamp: number }>>([]);
@@ -696,6 +697,7 @@ export default function AuctionRoomPage({
             {/* Bid Panel — unified deposit+bid flow (during Active, timer not expired) */}
             {isActive && !isSeller && !timerExpired && (
               <BidPanel
+                id="bid-panel"
                 auctionState={{
                   currentBid: auction.currentBid.toNumber(),
                   highestBidder: auction.highestBidder?.toBase58() ?? null,
@@ -815,24 +817,59 @@ export default function AuctionRoomPage({
 
               {/* Ended or timer expired: Settle (handles end + undelegate + settle) */}
               {canSettle && (
-                <button
-                  onClick={handleSettle}
-                  disabled={actionLoading}
-                  className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {actionLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Spinner />
-                      {progressLabel && (
-                        <span className="text-sm font-semibold normal-case tracking-normal">
-                          {progressLabel}
-                        </span>
-                      )}
+                settleConfirm ? (
+                  <div className="flex flex-col gap-2 rounded-lg border border-gold/30 bg-gold/5 p-4">
+                    <p className="text-center text-xs text-cream/60">
+                      This will end the auction, transfer the NFT to the winner, and distribute SOL. Continue?
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSettleConfirm(false)}
+                        disabled={actionLoading}
+                        className="flex h-10 flex-1 items-center justify-center rounded-md border border-charcoal-light text-xs font-medium text-cream/50 transition-all hover:border-cream/30 hover:text-cream/70 disabled:opacity-40"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => { setSettleConfirm(false); handleSettle(); }}
+                        disabled={actionLoading}
+                        className="flex h-10 flex-1 items-center justify-center rounded-md bg-gold text-xs font-semibold tracking-[0.1em] text-jet uppercase transition-all hover:bg-gold-light disabled:opacity-40"
+                      >
+                        {actionLoading ? (
+                          <div className="flex items-center gap-2">
+                            <Spinner />
+                            {progressLabel && (
+                              <span className="text-xs font-medium normal-case tracking-normal">
+                                {progressLabel}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          "Confirm Settle"
+                        )}
+                      </button>
                     </div>
-                  ) : (
-                    "Settle Auction"
-                  )}
-                </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSettleConfirm(true)}
+                    disabled={actionLoading}
+                    className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {actionLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Spinner />
+                        {progressLabel && (
+                          <span className="text-sm font-semibold normal-case tracking-normal">
+                            {progressLabel}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      "Settle Auction"
+                    )}
+                  </button>
+                )
               )}
 
               {/* Settled or Cancelled or Ended: Claim Refund (not for winner — their deposit was used) */}
@@ -862,6 +899,31 @@ export default function AuctionRoomPage({
           </motion.div>
         </div>
       </motion.div>
+
+      {/* Mobile sticky bid bar — visible only on small screens during active auction */}
+      {isActive && !isSeller && !timerExpired && publicKey && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-charcoal-light bg-jet/95 px-4 py-3 backdrop-blur-sm lg:hidden">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col">
+              <span className="text-[10px] tracking-[0.15em] text-cream/40 uppercase">
+                {auction.currentBid.toNumber() > 0 ? "Current bid" : "Reserve"}
+              </span>
+              <span className="text-lg font-bold tabular-nums text-gold">
+                {auction.currentBid.toNumber() > 0
+                  ? formatSOL(auction.currentBid.toNumber())
+                  : formatSOL(auction.reservePrice.toNumber())}{" "}
+                <span className="text-xs font-medium text-gold/50">SOL</span>
+              </span>
+            </div>
+            <button
+              onClick={() => document.getElementById("bid-panel")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+              className="rounded-md bg-gold px-6 py-2.5 text-sm font-semibold tracking-[0.1em] text-jet uppercase transition-all hover:bg-gold-light"
+            >
+              Place Bid
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
