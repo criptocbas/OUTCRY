@@ -139,21 +139,35 @@ async function getMagicBlockhash(
     }
   }
 
-  const res = await fetch(rpcEndpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "getBlockhashForAccounts",
-      params: [Array.from(writableAccounts)],
-    }),
-  });
-  const data = await res.json();
-  if (!data.result?.blockhash || typeof data.result.lastValidBlockHeight !== "number") {
-    throw new Error("Invalid blockhash response from Magic Router");
+  const MAX_RETRIES = 3;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(rpcEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getBlockhashForAccounts",
+          params: [Array.from(writableAccounts)],
+        }),
+      });
+      const data = await res.json();
+      if (!data.result?.blockhash || typeof data.result.lastValidBlockHeight !== "number") {
+        throw new Error("Invalid blockhash response from Magic Router");
+      }
+      return data.result;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise(r => setTimeout(r, 500 * 2 ** attempt));
+      }
+    }
   }
-  return data.result;
+
+  throw lastError ?? new Error("getMagicBlockhash failed after retries");
 }
 
 /**
