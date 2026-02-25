@@ -87,6 +87,9 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
   // Track whether we've done the initial fetch so polling doesn't flash loading
   const hasFetchedRef = useRef(false);
 
+  // Overlap guard — prevents concurrent polling fetches
+  const fetchingRef = useRef(false);
+
   const fetchAuction = useCallback(async () => {
     if (!auctionPublicKey || !wallet) {
       setAuction(null);
@@ -99,6 +102,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
     }
     setError(null);
 
+    fetchingRef.current = true;
     try {
       const program = getProgram(connection, wallet);
       programRef.current = program;
@@ -113,6 +117,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
     } finally {
       setLoading(false);
       hasFetchedRef.current = true;
+      fetchingRef.current = false;
     }
   }, [auctionPublicKey, wallet, connection]);
 
@@ -169,6 +174,7 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
     if (!auctionPublicKey || !wallet) return;
 
     const interval = setInterval(() => {
+      if (fetchingRef.current) return;
       fetchAuction();
     }, 3000);
 

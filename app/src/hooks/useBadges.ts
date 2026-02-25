@@ -37,8 +37,29 @@ export function useBadges(address?: string) {
   }, [umi, targetAddress]);
 
   useEffect(() => {
-    refetch();
-  }, [refetch]);
+    if (!targetAddress) return;
+
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await fetchUserBadges(umi, targetAddress);
+        if (!cancelled) setBadges(result);
+      } catch (err: unknown) {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : "Failed to fetch badges";
+          setError(msg);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [umi, targetAddress]);
 
   return { badges, loading, error, refetch };
 }

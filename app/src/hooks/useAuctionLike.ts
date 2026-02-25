@@ -33,6 +33,7 @@ export function useAuctionLike(
 
   const activeKeyRef = useRef<string | null>(null);
   const pollingRef = useRef(false);
+  const togglingRef = useRef(false);
 
   // Initial fetch
   useEffect(() => {
@@ -92,8 +93,9 @@ export function useAuctionLike(
   }, [auctionId, userProfileId]);
 
   const toggle = useCallback(async () => {
-    if (!userProfileId || !auctionId) return;
+    if (!userProfileId || !auctionId || togglingRef.current) return;
 
+    togglingRef.current = true;
     setLoading(true);
     try {
       if (hasLiked) {
@@ -109,6 +111,7 @@ export function useAuctionLike(
       // Silently ignore
     } finally {
       setLoading(false);
+      togglingRef.current = false;
     }
   }, [userProfileId, auctionId, hasLiked]);
 
