@@ -288,10 +288,10 @@ export default function AuctionRoomPage({
         const res = await fetch(MAGIC_ROUTER_RPC, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }),
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getLatestBlockhash", params: [{ commitment: "confirmed" }] }),
         });
         const json = await res.json();
-        if (!cancelled) setErHealthy(json?.result === "ok");
+        if (!cancelled) setErHealthy(!!json?.result?.value?.blockhash);
       } catch {
         if (!cancelled) setErHealthy(false);
       }
