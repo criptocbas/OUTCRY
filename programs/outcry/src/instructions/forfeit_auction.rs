@@ -105,6 +105,17 @@ pub fn handle_forfeit_auction(ctx: Context<ForfeitAuction>) -> Result<()> {
         OutcryError::ForfeitNotNeeded
     );
 
+    // --- Verify vault has sufficient lamports for the penalty transfer ---
+    if winner_deposit_amount > 0 {
+        let vault_lamports = ctx.accounts.auction_vault.to_account_info().lamports();
+        let vault_rent = Rent::get()?.minimum_balance(ctx.accounts.auction_vault.to_account_info().data_len());
+        let available = vault_lamports.saturating_sub(vault_rent);
+        require!(
+            available >= winner_deposit_amount,
+            OutcryError::InsufficientVaultBalance
+        );
+    }
+
     // Forfeit winner's deposit to seller as penalty (if any)
     if winner_deposit_amount > 0 {
         let vault_info = ctx.accounts.auction_vault.to_account_info();

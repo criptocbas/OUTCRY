@@ -2222,6 +2222,11 @@
       "code": 6025,
       "name": "InvalidDepositAccount",
       "msg": "Could not deserialize deposit account data"
+    },
+    {
+      "code": 6026,
+      "name": "InsufficientVaultBalance",
+      "msg": "Vault has insufficient lamports for this operation"
     }
   ],
   "types": [

@@ -54,4 +54,6 @@ pub enum OutcryError {
     InvalidBidIncrement,
     #[msg("Could not deserialize deposit account data")]
     InvalidDepositAccount,
+    #[msg("Vault has insufficient lamports for this operation")]
+    InsufficientVaultBalance,
 }

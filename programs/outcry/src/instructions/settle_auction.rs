@@ -201,6 +201,15 @@ pub fn handle_settle_auction(ctx: Context<SettleAuction>) -> Result<()> {
         .checked_sub(winning_bid)
         .ok_or(OutcryError::ArithmeticOverflow)?;
 
+    // --- Verify vault has sufficient lamports ---
+    let vault_lamports = ctx.accounts.auction_vault.to_account_info().lamports();
+    let vault_rent = Rent::get()?.minimum_balance(ctx.accounts.auction_vault.to_account_info().data_len());
+    let available = vault_lamports.saturating_sub(vault_rent);
+    require!(
+        available >= winning_bid,
+        OutcryError::InsufficientVaultBalance
+    );
+
     // --- Parse royalty info from Metaplex metadata ---
     let metadata_data = ctx.accounts.nft_metadata.try_borrow_data()?;
     let (seller_fee_bps, creators) = parse_metadata_royalties(&metadata_data)?;
