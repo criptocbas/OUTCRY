@@ -85,6 +85,10 @@ export default function CreateAuctionPage() {
       setError("Reserve price must be at least 0.01 SOL.");
       return;
     }
+    if (reservePriceLamports > 1_000_000 * LAMPORTS_PER_SOL) {
+      setError("Reserve price cannot exceed 1,000,000 SOL.");
+      return;
+    }
 
     const incrementLamports = Math.floor(
       parseFloat(minBidIncrement) * LAMPORTS_PER_SOL
@@ -328,6 +332,7 @@ export default function CreateAuctionPage() {
                   type="number"
                   step="0.01"
                   min="0.01"
+                  max="1000000"
                   value={reservePrice}
                   onChange={(e) => setReservePrice(e.target.value)}
                   required
