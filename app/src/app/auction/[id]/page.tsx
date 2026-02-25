@@ -245,7 +245,7 @@ export default function AuctionRoomPage({
   // -------------------------------------------------------------------------
   const handleBid = useCallback(
     async (bidLamports: number) => {
-      if (!auction) return;
+      if (!auction || !publicKey) return;
       setActionLoading(true);
       setProgressLabel(null);
 
@@ -283,7 +283,7 @@ export default function AuctionRoomPage({
   // Go Live: Start + Delegate in one click
   // -------------------------------------------------------------------------
   const handleGoLive = useCallback(async () => {
-    if (!auction) return;
+    if (!auction || !publicKey) return;
     setActionLoading(true);
     setProgressLabel(null);
 
@@ -315,7 +315,7 @@ export default function AuctionRoomPage({
   // Settle: Undelegate (if needed) + Settle in one click
   // -------------------------------------------------------------------------
   const handleSettle = useCallback(async () => {
-    if (!auction) return;
+    if (!auction || !publicKey) return;
     setActionLoading(true);
     setProgressLabel(null);
 
@@ -484,7 +484,7 @@ export default function AuctionRoomPage({
   // Claim refund
   // -------------------------------------------------------------------------
   const handleClaimRefund = useCallback(async () => {
-    if (!auction) return;
+    if (!auction || !publicKey) return;
     setActionLoading(true);
     try {
       await actions.claimRefund(new PublicKey(id));
@@ -496,7 +496,43 @@ export default function AuctionRoomPage({
     } finally {
       setActionLoading(false);
     }
-  }, [auction, actions, id, addToast, refetch, refetchDeposit]);
+  }, [auction, actions, id, addToast, refetch, refetchDeposit, publicKey]);
+
+  // -------------------------------------------------------------------------
+  // Cancel auction (seller only, Created status)
+  // -------------------------------------------------------------------------
+  const handleCancel = useCallback(async () => {
+    if (!auction || !publicKey) return;
+    setActionLoading(true);
+    try {
+      await actions.cancelAuction(new PublicKey(id), auction.nftMint);
+      addToast("Auction cancelled — NFT returned", "success");
+      await refetch();
+    } catch (err: unknown) {
+      const msg = extractErrorMessage(err, "Cancel failed");
+      addToast(msg, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [auction, actions, id, addToast, refetch, publicKey]);
+
+  // -------------------------------------------------------------------------
+  // Close auction (seller only, reclaim rent)
+  // -------------------------------------------------------------------------
+  const handleClose = useCallback(async () => {
+    if (!auction || !publicKey) return;
+    setActionLoading(true);
+    try {
+      await actions.closeAuction(new PublicKey(id), auction.nftMint);
+      addToast("Auction closed — rent reclaimed!", "success");
+      await refetch();
+    } catch (err: unknown) {
+      const msg = extractErrorMessage(err, "Close failed");
+      addToast(msg, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [auction, actions, id, addToast, refetch, publicKey]);
 
   // ---------------------------------------------------------------------------
   // Loading state
@@ -940,6 +976,28 @@ export default function AuctionRoomPage({
                   className="flex h-12 w-full items-center justify-center rounded-md border border-gold/40 text-sm font-medium tracking-[0.15em] text-gold uppercase transition-all duration-200 hover:border-gold hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {actionLoading ? <Spinner /> : "Claim Refund"}
+                </button>
+              )}
+
+              {/* Cancel auction — seller only, Created status */}
+              {isCreated && isSeller && (
+                <button
+                  onClick={handleCancel}
+                  disabled={actionLoading}
+                  className="flex h-10 w-full items-center justify-center rounded-md border border-red-500/30 text-xs font-medium tracking-[0.1em] text-red-400 uppercase transition-all hover:border-red-400 hover:bg-red-500/5 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {actionLoading ? <Spinner /> : "Cancel Auction"}
+                </button>
+              )}
+
+              {/* Close auction — seller only, Settled/Cancelled status, reclaim rent */}
+              {(isSettled || isCancelled) && isSeller && (
+                <button
+                  onClick={handleClose}
+                  disabled={actionLoading}
+                  className="flex h-10 w-full items-center justify-center rounded-md border border-cream/15 text-xs font-medium tracking-[0.1em] text-cream/40 uppercase transition-all hover:border-cream/30 hover:text-cream/60 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {actionLoading ? <Spinner /> : "Close Auction & Reclaim Rent"}
                 </button>
               )}
             </div>

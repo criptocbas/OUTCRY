@@ -151,8 +151,9 @@ export function useAuction(auctionPublicKey: string | null): UseAuctionReturn {
             accountInfo.data
           );
           setAuction(decoded as unknown as AuctionAccount);
-        } catch {
-          // If decoding fails (e.g. account closed), silently ignore.
+        } catch (err) {
+          // If decoding fails (e.g. account closed or data changed), log it
+          console.warn("Subscription decode error:", err);
         }
       },
       "confirmed"

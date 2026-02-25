@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { useWallet } from "@solana/wallet-adapter-react";
 import BN from "bn.js";
 import {
   LAMPORTS_PER_SOL,
   DEFAULT_EXTENSION_SECONDS,
   DEFAULT_EXTENSION_WINDOW,
+  DEVNET_RPC,
 } from "@/lib/constants";
 import { useAuctionActions } from "@/hooks/useAuctionActions";
 import { getAuctionPDA } from "@/lib/program";
@@ -92,7 +94,28 @@ export default function CreateAuctionPage() {
       return;
     }
 
+    if (!publicKey) {
+      setError("Please connect your wallet first.");
+      return;
+    }
+
     setIsLoading(true);
+
+    // Verify NFT ownership before creating auction
+    try {
+      const connection = new Connection(DEVNET_RPC, "confirmed");
+      const ata = await getAssociatedTokenAddress(mintPubkey, publicKey);
+      const tokenAccount = await connection.getTokenAccountBalance(ata);
+      if (!tokenAccount.value.uiAmount || tokenAccount.value.uiAmount < 1) {
+        setError("You don't own this NFT. Check the mint address and ensure it's in your wallet.");
+        setIsLoading(false);
+        return;
+      }
+    } catch {
+      setError("Could not verify NFT ownership. Make sure the mint address is correct and you own this NFT.");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const sig = await createAuction({

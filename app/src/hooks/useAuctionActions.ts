@@ -70,6 +70,12 @@ export interface UseAuctionActionsReturn {
     winner: PublicKey
   ) => Promise<string>;
 
+  /** Cancel a Created auction (seller only, no bids). Returns NFT to seller. */
+  cancelAuction: (auctionStatePubkey: PublicKey, nftMint: PublicKey) => Promise<string>;
+
+  /** Close a Settled/Cancelled auction (seller only). Reclaims rent from all accounts. */
+  closeAuction: (auctionStatePubkey: PublicKey, nftMint: PublicKey) => Promise<string>;
+
   /** True when the wallet is connected and actions are available. */
   ready: boolean;
 }
@@ -673,6 +679,77 @@ export function useAuctionActions(): UseAuctionActionsReturn {
     [l1Program, publicKey]
   );
 
+  // -----------------------------------------------------------------------
+  // cancelAuction (L1 — seller cancels Created auction)
+  // -----------------------------------------------------------------------
+  const cancelAuction = useCallback(
+    async (auctionStatePubkey: PublicKey, nftMint: PublicKey): Promise<string> => {
+      if (!l1Program || !publicKey) {
+        throw new Error("Wallet not connected");
+      }
+
+      const escrowNftTokenAccount = await getAssociatedTokenAddress(
+        nftMint,
+        auctionStatePubkey,
+        true
+      );
+
+      const sellerNftTokenAccount = await getAssociatedTokenAddress(
+        nftMint,
+        publicKey
+      );
+
+      const sig = await l1Program.methods
+        .cancelAuction()
+        .accounts({
+          seller: publicKey,
+          auctionState: auctionStatePubkey,
+          nftMint,
+          escrowNftTokenAccount,
+          sellerNftTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc({ skipPreflight: true });
+
+      return sig;
+    },
+    [l1Program, publicKey]
+  );
+
+  // -----------------------------------------------------------------------
+  // closeAuction (L1 — seller reclaims rent after Settled/Cancelled)
+  // -----------------------------------------------------------------------
+  const closeAuction = useCallback(
+    async (auctionStatePubkey: PublicKey, nftMint: PublicKey): Promise<string> => {
+      if (!l1Program || !publicKey) {
+        throw new Error("Wallet not connected");
+      }
+
+      const [auctionVault] = getVaultPDA(auctionStatePubkey);
+
+      const escrowNftTokenAccount = await getAssociatedTokenAddress(
+        nftMint,
+        auctionStatePubkey,
+        true
+      );
+
+      const sig = await l1Program.methods
+        .closeAuction()
+        .accounts({
+          seller: publicKey,
+          auctionState: auctionStatePubkey,
+          auctionVault,
+          nftMint,
+          escrowNftTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc({ skipPreflight: true });
+
+      return sig;
+    },
+    [l1Program, publicKey]
+  );
+
   return {
     createAuction,
     deposit,
@@ -684,6 +761,8 @@ export function useAuctionActions(): UseAuctionActionsReturn {
     settleAuction,
     claimRefund,
     forfeitAuction,
+    cancelAuction,
+    closeAuction,
     ready: !!l1Program && !!publicKey,
   };
 }
