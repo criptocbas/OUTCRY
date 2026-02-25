@@ -196,14 +196,14 @@ export default function CreateAuctionPage() {
             {auctionAddress && (
               <Link
                 href={`/auction/${auctionAddress}`}
-                className="flex h-11 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light"
+                className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light"
               >
                 Go to Auction
               </Link>
             )}
             <Link
               href="/"
-              className={`flex h-11 w-full items-center justify-center rounded-md text-sm font-medium tracking-[0.15em] uppercase transition-all duration-200 ${
+              className={`flex h-12 w-full items-center justify-center rounded-md text-sm font-medium tracking-[0.15em] uppercase transition-all duration-200 ${
                 auctionAddress
                   ? "border border-gold/30 text-gold hover:border-gold hover:bg-gold/5"
                   : "bg-gold text-jet hover:bg-gold-light"
@@ -220,7 +220,7 @@ export default function CreateAuctionPage() {
                 setDuration(3600);
                 setMinBidIncrement("0.1");
               }}
-              className="flex h-11 w-full items-center justify-center rounded-md border border-cream/10 text-sm font-medium tracking-[0.15em] text-cream/40 uppercase transition-all duration-200 hover:border-cream/20 hover:text-cream/60"
+              className="flex h-12 w-full items-center justify-center rounded-md border border-cream/10 text-sm font-medium tracking-[0.15em] text-cream/40 uppercase transition-all duration-200 hover:border-cream/20 hover:text-cream/60"
             >
               Create Another
             </button>
@@ -436,7 +436,7 @@ export default function CreateAuctionPage() {
             <button
               type="submit"
               disabled={isLoading || !ready}
-              className="flex h-13 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-12 w-full items-center justify-center rounded-md bg-gold text-sm font-semibold tracking-[0.15em] text-jet uppercase transition-all duration-200 hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
             >
               {isLoading ? (
                 <Spinner />
