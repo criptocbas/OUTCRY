@@ -317,7 +317,8 @@ export default function AuctionRoomPage({
   const timerExpired =
     auction && auction.endTime.toNumber() > 0 &&
     Math.floor(Date.now() / 1000) + clockOffset >= auction.endTime.toNumber();
-  const canSettle = !isSettled && !isCancelled && (isEnded || (isActive && timerExpired));
+  const hasBids = auction ? auction.bidCount > 0 : false;
+  const canSettle = !isSettled && !isCancelled && hasBids && (isEnded || (isActive && timerExpired));
   const isWinner =
     auction && publicKey && auction.highestBidder
       ? auction.highestBidder.toBase58() === publicKey.toBase58()
@@ -743,13 +744,59 @@ export default function AuctionRoomPage({
   }, [actions, id, addToast, refetch, refetchDeposit, publicKey]);
 
   // -------------------------------------------------------------------------
-  // Cancel auction (seller only, Created status)
+  // Cancel auction (seller only, Created or Ended with 0 bids)
   // -------------------------------------------------------------------------
   const handleCancel = useCallback(async () => {
     if (!auction || !publicKey) return;
     setActionLoading(true);
+    setProgressLabel(null);
     try {
-      const cancelSig = await actions.cancelAuction(new PublicKey(id), auction.nftMint);
+      const auctionPubkey = new PublicKey(id);
+
+      // If auction is Active + timer expired (or Ended) and delegated, need to end + undelegate first
+      const freshStatus = parseAuctionStatus(auction.status);
+      if (freshStatus === "Active" || freshStatus === "Ended") {
+        // Check delegation
+        const [delegationRecord] = PublicKey.findProgramAddressSync(
+          [Buffer.from("delegation"), auctionPubkey.toBuffer()],
+          DELEGATION_PROGRAM_ID
+        );
+        const delegationInfo = await l1Connection.getAccountInfo(delegationRecord);
+        const currentlyDelegated = delegationInfo !== null;
+
+        // End auction on ER if still active
+        if (freshStatus === "Active") {
+          setProgressLabel("Ending auction...");
+          try {
+            await actions.endAuction(auctionPubkey);
+          } catch (endErr: unknown) {
+            const endMsg = endErr instanceof Error ? endErr.message : "";
+            if (!endMsg.includes("InvalidAuctionStatus")) throw endErr;
+          }
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+
+        // Undelegate if needed
+        if (currentlyDelegated) {
+          setProgressLabel("Returning state to L1...");
+          try {
+            await actions.undelegateAuction(auctionPubkey);
+          } catch (undelegateErr: unknown) {
+            const msg = undelegateErr instanceof Error ? undelegateErr.message : "";
+            if (!msg.includes("not delegated") && !msg.includes("AccountNotDelegated")) throw undelegateErr;
+          }
+          // Wait for L1 confirmation
+          setProgressLabel("Waiting for L1 confirmation...");
+          for (let attempt = 0; attempt < 15; attempt++) {
+            await new Promise((r) => setTimeout(r, 2000));
+            const info = await l1Connection.getAccountInfo(delegationRecord).catch(() => delegationInfo);
+            if (info === null) break;
+          }
+        }
+      }
+
+      setProgressLabel("Cancelling auction...");
+      const cancelSig = await actions.cancelAuction(auctionPubkey, auction.nftMint);
       addToast("Auction cancelled — NFT returned", "success", explorerUrl(cancelSig));
       await refetch();
     } catch (err: unknown) {
@@ -757,8 +804,9 @@ export default function AuctionRoomPage({
       addToast(msg, "error");
     } finally {
       setActionLoading(false);
+      setProgressLabel(null);
     }
-  }, [auction, actions, id, addToast, refetch, publicKey]);
+  }, [auction, actions, id, addToast, refetch, publicKey, l1Connection]);
 
   // -------------------------------------------------------------------------
   // Close auction (seller only, reclaim rent)
@@ -1340,14 +1388,23 @@ export default function AuctionRoomPage({
                 </div>
               )}
 
-              {/* Cancel auction — seller only, Created status */}
-              {isCreated && isSeller && (
+              {/* Cancel auction — seller only: Created, or Ended/expired with 0 bids */}
+              {isSeller && (isCreated || ((isEnded || (isActive && timerExpired)) && !hasBids)) && (
                 <button
                   onClick={handleCancel}
                   disabled={actionLoading}
                   className="flex h-10 w-full items-center justify-center rounded-md border border-red-500/30 text-xs font-medium tracking-[0.1em] text-red-400 uppercase transition-all hover:border-red-400 hover:bg-red-500/5 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {actionLoading ? <Spinner /> : "Cancel Auction"}
+                  {actionLoading ? (
+                    <div className="flex items-center gap-2">
+                      <Spinner />
+                      {progressLabel && (
+                        <span className="text-xs font-medium normal-case tracking-normal">
+                          {progressLabel}
+                        </span>
+                      )}
+                    </div>
+                  ) : "Cancel Auction"}
                 </button>
               )}
 
