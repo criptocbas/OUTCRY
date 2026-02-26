@@ -29,7 +29,7 @@ export default function BadgeGrid({ badges, loading }: BadgeGridProps) {
         <span className="text-2xl opacity-20">&#9734;</span>
         <p className="text-xs text-cream/20">No badges earned yet</p>
         <p className="max-w-xs text-center text-[10px] text-cream/15">
-          Participate in auctions to earn Present, Contender, and Victor badges.
+          Participate in auctions to earn Contender and Victor badges.
         </p>
       </div>
     );
