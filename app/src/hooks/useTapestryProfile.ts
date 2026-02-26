@@ -20,14 +20,35 @@ export interface UseTapestryProfileReturn {
 // ---------------------------------------------------------------------------
 
 const MAX_CACHE = 200;
-const profileCache = new Map<string, ProfileWithCounts | null>();
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+interface CacheEntry {
+  value: ProfileWithCounts | null;
+  ts: number;
+}
+
+const profileCache = new Map<string, CacheEntry>();
+
+function cacheGet(key: string): ProfileWithCounts | null | undefined {
+  const entry = profileCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    profileCache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function cacheHas(key: string): boolean {
+  return cacheGet(key) !== undefined;
+}
 
 function cacheSet(key: string, value: ProfileWithCounts | null) {
   if (profileCache.size >= MAX_CACHE) {
     const oldest = profileCache.keys().next().value;
     if (oldest !== undefined) profileCache.delete(oldest);
   }
-  profileCache.set(key, value);
+  profileCache.set(key, { value, ts: Date.now() });
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +60,7 @@ const inflight = new Set<string>();
 
 export function prefetchProfiles(addresses: string[]): void {
   for (const addr of addresses) {
-    if (profileCache.has(addr) || inflight.has(addr)) continue;
+    if (cacheHas(addr) || inflight.has(addr)) continue;
     inflight.add(addr);
     getProfile(addr)
       .then((result) => cacheSet(addr, result))
@@ -65,8 +86,9 @@ export function useTapestryProfile(
 
   const fetchProfile = useCallback(async (address: string) => {
     // Return cached result immediately if available.
-    if (profileCache.has(address)) {
-      setProfile(profileCache.get(address) ?? null);
+    const cached = cacheGet(address);
+    if (cached !== undefined) {
+      setProfile(cached);
       setLoading(false);
       setError(null);
       return;

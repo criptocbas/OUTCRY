@@ -52,6 +52,17 @@ function extractErrorMessage(err: unknown, fallback: string): string {
       const anchorMsg = msg.match(/Error Message: (.+?)\.?$/m)?.[1];
       if (anchorMsg) return anchorMsg;
     }
+    // Account not found / not initialized — common during settlement
+    if (msg.includes("AccountNotInitialized") || msg.includes("3012")) {
+      return "Required account not initialized — winner may not have deposited";
+    }
+    if (msg.includes("Account does not exist") || msg.includes("could not find account")) {
+      return "Required account not found — a creator or deposit account may be missing";
+    }
+    // Blockhash expired (slow confirmation)
+    if (msg.includes("Blockhash not found") || msg.includes("block height exceeded")) {
+      return "Transaction expired — please try again";
+    }
     // SendTransactionError may wrap the real message
     const errObj = err as { transactionMessage?: string; logs?: string[] };
     if (errObj.transactionMessage) return errObj.transactionMessage;
@@ -228,7 +239,7 @@ export default function AuctionRoomPage({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const sync = async () => {
       try {
         const slot = await l1Connection.getSlot();
         const blockTime = await l1Connection.getBlockTime(slot);
@@ -236,8 +247,10 @@ export default function AuctionRoomPage({
           setClockOffset(blockTime - Math.floor(Date.now() / 1000));
         }
       } catch { /* non-critical */ }
-    })();
-    return () => { cancelled = true; };
+    };
+    sync();
+    const interval = setInterval(sync, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [l1Connection]);
 
   // Pre-warm Tapestry profile cache on initial auction load
