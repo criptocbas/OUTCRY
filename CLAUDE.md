@@ -18,11 +18,14 @@ Artists list NFTs, collectors compete in real-time, spectators watch. Every bid 
 
 - Program deployed to devnet: `J7r5mzvVUjSNQteoqn6Hd3LjZ3ksmwoD5xsnUvMJwPZo`
 - Frontend running (Next.js dev server)
-- Full L1 lifecycle works (create, start, deposit, settle, refund, cancel)
-- MagicBlock ER integration wired up (delegation, place_bid, end_auction, undelegation)
+- Full L1 lifecycle works (create, start, deposit, settle, refund, cancel, forfeit, force-close)
+- MagicBlock ER integration working (delegation, place_bid, end_auction, undelegation)
+- Session keys implemented (popup-free bidding via ephemeral keypairs)
 - Tapestry social layer integrated (profiles, follows, likes, comments)
-- Bubblegum badge system integrated (Present, Contender, Victor badges)
-- Testing bidding via ER on devnet (blockhash fix in progress)
+- Bubblegum badge system integrated (Contender and Victor badges)
+- Royalty enforcement at settlement (Metaplex metadata creator splits)
+- Permissionless refunds + emergency refund for ER-stuck deposits
+- End-to-end devnet testing in progress
 
 ## Architecture — Non-Negotiable Decisions
 
@@ -192,26 +195,35 @@ const sig = await connection.sendRawTransaction(signed.serialize(), { skipPrefli
 - **Token Metadata Program:** `metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s`
 - **Bubblegum Program:** `BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY`
 - Badge tree: depth 14 = 16,384 cNFTs, canopy depth 11
-- Badge types: Present (spectator), Contender (bidder), Victor (winner)
+- Badge types: Contender (bidder), Victor (winner)
 - Uses Helius DAS API for cNFT fetching
 
 ## Constants
 
+### Program constants (constants.rs)
 ```
 PROTOCOL_FEE_BPS = 250 (2.5%)
-DEFAULT_EXTENSION_SECONDS = 300 (5 min)
-DEFAULT_EXTENSION_WINDOW = 300 (5 min)
-DEFAULT_MIN_BID_INCREMENT = 100_000_000 (0.1 SOL)
 MIN_AUCTION_DURATION = 300 (5 minutes)
 MAX_AUCTION_DURATION = 604_800 (7 days)
+FORCE_CLOSE_GRACE_PERIOD = 604_800 (7 days)
+MAX_EXTENSION_SECONDS = 3_600 (1 hour — cap on total anti-snipe extension)
+```
+
+### Per-auction parameters (set at creation, stored in AuctionState)
+```
+extension_seconds — how much to extend per late bid (frontend default: 300s / 5 min)
+extension_window — late bid threshold (frontend default: 300s / 5 min)
+min_bid_increment — minimum raise over current bid (frontend default: 0.1 SOL)
+reserve_price — minimum first bid
+duration_seconds — auction duration
 ```
 
 ## Key File Paths
 
 ### Program
 - `programs/outcry/src/lib.rs` — Program entry (#[ephemeral] + #[program])
-- `programs/outcry/src/state/auction.rs` — AuctionState, AuctionVault, BidderDeposit, AuctionStatus
-- `programs/outcry/src/instructions/` — All 11 instruction handlers
+- `programs/outcry/src/state/auction.rs` — AuctionState, AuctionVault, BidderDeposit, SessionToken, AuctionStatus
+- `programs/outcry/src/instructions/` — All 17 instruction handlers
 - `programs/outcry/src/constants.rs` — Seeds and numeric constants
 - `programs/outcry/src/errors.rs` — Custom error codes
 - `programs/outcry/src/events.rs` — Event definitions
@@ -223,16 +235,23 @@ MAX_AUCTION_DURATION = 604_800 (7 days)
 - `app/src/app/auction/[id]/page.tsx` — Auction room (main UI)
 - `app/src/app/profile/[address]/page.tsx` — User profile
 - `app/src/hooks/useAuctionActions.ts` — All program interactions (L1 + ER)
-- `app/src/hooks/useAuction.ts` — Single auction fetch + WebSocket subscription
+- `app/src/hooks/useAuction.ts` — Single auction fetch + polling
 - `app/src/hooks/useAuctions.ts` — All auctions listing (devnet + Magic Router)
 - `app/src/hooks/useBidderDeposit.ts` — User's BidderDeposit PDA fetch
 - `app/src/hooks/useSessionBidding.ts` — Ephemeral keypair + session-based popup-free bidding
+- `app/src/hooks/useNftMetadata.ts` — NFT metadata via Helius DAS
+- `app/src/hooks/useTapestryProfile.ts` — Tapestry profile resolution (with 30-min TTL cache)
+- `app/src/hooks/useFollowStatus.ts` — Follow/unfollow with rapid-click guard
+- `app/src/hooks/useAuctionLike.ts` — Like with optimistic updates + rollback
+- `app/src/hooks/useAuctionComments.ts` — Real-time comments polling
+- `app/src/hooks/useBadges.ts` — Badge fetching via Helius DAS
 - `app/src/lib/program.ts` — Anchor program + PDA helpers
 - `app/src/lib/magic-router.ts` — ConnectionMagicRouter singleton
 - `app/src/lib/constants.ts` — Program ID, seeds, endpoints
 - `app/src/lib/idl.json` — Copy of IDL for frontend (keep in sync!)
 - `app/src/lib/tapestry.ts` — Tapestry API client
 - `app/src/lib/badges.ts` — Bubblegum badge minting
+- `app/src/lib/utils.ts` — formatSOL, truncateAddress, etc.
 - `app/src/components/auction/BidPanel.tsx` — Deposit + bid UI
 
 ### Tests
