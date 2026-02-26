@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, use } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -8,6 +8,7 @@ import BN from "bn.js";
 import { useAuction, parseAuctionStatus } from "@/hooks/useAuction";
 import { useAuctionActions } from "@/hooks/useAuctionActions";
 import { useBidderDeposit } from "@/hooks/useBidderDeposit";
+import { useSessionBidding } from "@/hooks/useSessionBidding";
 import AuctionStatus from "@/components/auction/AuctionStatus";
 import CountdownTimer from "@/components/auction/CountdownTimer";
 import BidPanel from "@/components/auction/BidPanel";
@@ -138,6 +139,7 @@ export default function AuctionRoomPage({
   const { profile: myTapestryProfile } = useTapestryProfile(walletAddress);
   const myProfileId = myTapestryProfile?.profile?.id ?? null;
   const { metadata: nftMetadata } = useNftMetadata(auction?.nftMint?.toBase58() ?? null);
+  const session = useSessionBidding();
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
@@ -148,13 +150,15 @@ export default function AuctionRoomPage({
   const [prevHighestBidder, setPrevHighestBidder] = useState<string | null>(null);
   const [bidHistory, setBidHistory] = useState<Array<{ bidder: string; amount: number; timestamp: number }>>([]);
   const [lastBidSpeedMs, setLastBidSpeedMs] = useState<number | null>(null);
+  const toastIdRef = useRef(0);
 
   const addToast = useCallback(
     (message: string, type: "success" | "error", link?: string) => {
       setToasts((prev) => {
         // Deduplicate: skip if identical message already showing
         if (prev.some((t) => t.message === message)) return prev;
-        const newToast: Toast = { id: Date.now(), message, type, link };
+        toastIdRef.current += 1;
+        const newToast: Toast = { id: toastIdRef.current, message, type, link };
         // Limit to 3 concurrent toasts — drop oldest
         const updated = [...prev, newToast];
         return updated.length > 3 ? updated.slice(-3) : updated;
@@ -319,6 +323,17 @@ export default function AuctionRoomPage({
       setProgressLabel(null);
 
       try {
+        // Session mode: instant bid via ephemeral key (no wallet popup)
+        if (session.sessionActive) {
+          setProgressLabel("Quick bid...");
+          const { sendMs } = await session.sessionBid(new PublicKey(id), bidLamports);
+          setLastBidSpeedMs(sendMs);
+          addToast(`Quick bid: ${formatSOL(bidLamports)} SOL — ${sendMs}ms`, "success");
+          await refetch();
+          return;
+        }
+
+        // Standard mode: auto-deposit if needed, then wallet-signed bid
         const currentDeposit = bidderDepositAccount?.amount?.toNumber() ?? 0;
         const depositNeeded = Math.max(0, bidLamports - currentDeposit);
 
@@ -339,12 +354,58 @@ export default function AuctionRoomPage({
       } catch (err: unknown) {
         const msg = extractErrorMessage(err, "Bid failed");
         addToast(msg, "error");
+        // If session bid fails, disable session so user can fall back
+        if (session.sessionActive) {
+          session.disableSession();
+          addToast("Session expired — re-enable Quick Bidding to continue", "error");
+        }
       } finally {
         setActionLoading(false);
         setProgressLabel(null);
       }
     },
-    [auction, actions, id, publicKey, addToast, refetch, refetchDeposit, bidderDepositAccount]
+    [auction, actions, id, publicKey, addToast, refetch, refetchDeposit, bidderDepositAccount, session]
+  );
+
+  // -------------------------------------------------------------------------
+  // Enable session bidding: deposit + fund ephemeral key + create session
+  // -------------------------------------------------------------------------
+  const handleEnableSession = useCallback(
+    async (depositAmount: number) => {
+      if (!publicKey) return;
+      try {
+        await session.enableSession(new PublicKey(id), depositAmount);
+        addToast("Quick Bidding enabled — bids are now instant!", "success");
+        await refetchDeposit();
+      } catch (err: unknown) {
+        const msg = extractErrorMessage(err, "Failed to enable Quick Bidding");
+        addToast(msg, "error");
+      }
+    },
+    [session, id, publicKey, addToast, refetchDeposit]
+  );
+
+  // -------------------------------------------------------------------------
+  // Top up deposit during active session (one wallet popup)
+  // -------------------------------------------------------------------------
+  const handleTopUpDeposit = useCallback(
+    async (amount: number) => {
+      if (!publicKey) return;
+      setActionLoading(true);
+      setProgressLabel("Depositing SOL...");
+      try {
+        const depSig = await actions.deposit(new PublicKey(id), new BN(amount));
+        addToast(`Deposited ${formatSOL(amount)} SOL`, "success", explorerUrl(depSig));
+        await refetchDeposit();
+      } catch (err: unknown) {
+        const msg = extractErrorMessage(err, "Deposit failed");
+        addToast(msg, "error");
+      } finally {
+        setActionLoading(false);
+        setProgressLabel(null);
+      }
+    },
+    [actions, id, publicKey, addToast, refetchDeposit]
   );
 
   // -------------------------------------------------------------------------
@@ -967,6 +1028,11 @@ export default function AuctionRoomPage({
                 isLoading={actionLoading}
                 isSeller={false}
                 progressLabel={progressLabel}
+                sessionActive={session.sessionActive}
+                onEnableSession={handleEnableSession}
+                sessionActivating={session.activating}
+                sessionActivationProgress={session.activationProgress}
+                onTopUpDeposit={handleTopUpDeposit}
               />
             )}
 

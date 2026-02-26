@@ -88,3 +88,20 @@ pub enum AuctionStatus {
     /// Seller cancelled (no bids placed)
     Cancelled,
 }
+
+/// Session key token — links an ephemeral browser keypair to a real wallet.
+/// Seeds: [b"session", auction_state.key(), bidder.key()]
+#[account]
+#[derive(InitSpace)]
+pub struct SessionToken {
+    /// The auction this session is scoped to
+    pub auction: Pubkey,
+    /// The REAL wallet (used for settlement, deposit matching, anti-shill)
+    pub bidder: Pubkey,
+    /// The ephemeral browser keypair that can sign bids without wallet popups
+    pub session_signer: Pubkey,
+    /// When this session was created (informational)
+    pub created_at: i64,
+    /// PDA bump seed
+    pub bump: u8,
+}

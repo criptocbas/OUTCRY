@@ -880,6 +880,86 @@
       ]
     },
     {
+      "name": "create_session",
+      "docs": [
+        "Creates a session token linking an ephemeral browser keypair to the",
+        "real wallet. One popup to authorize, then all bids are instant."
+      ],
+      "discriminator": [
+        242,
+        193,
+        143,
+        179,
+        150,
+        25,
+        122,
+        227
+      ],
+      "accounts": [
+        {
+          "name": "bidder",
+          "docs": [
+            "The real wallet authorizing this session."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "auction_state",
+          "docs": [
+            "The auction this session is scoped to. Uses UncheckedAccount because the",
+            "auction may be delegated to ER (owner changes to delegation program).",
+            "Security: the session_token PDA is seeded with this key, so a fake",
+            "address just creates a useless session that won't match any real auction."
+          ]
+        },
+        {
+          "name": "session_token",
+          "docs": [
+            "Session token PDA linking ephemeral key → real wallet for this auction.",
+            "init_if_needed: safe because PDA is unique per (bidder, auction), only",
+            "the bidder can create it, and reinit just updates session_signer (needed",
+            "after page refresh when a new ephemeral key is generated)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "auction_state"
+              },
+              {
+                "kind": "account",
+                "path": "bidder"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "session_signer",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "delegate_auction",
       "docs": [
         "Delegates AuctionState to the Ephemeral Rollup. Call on L1 after start_auction."
@@ -1699,6 +1779,74 @@
       ]
     },
     {
+      "name": "place_bid_session",
+      "docs": [
+        "Places a bid using a session key (ephemeral signer). No wallet popup.",
+        "The session token resolves the real wallet for settlement + anti-shill."
+      ],
+      "discriminator": [
+        71,
+        179,
+        148,
+        203,
+        85,
+        122,
+        193,
+        201
+      ],
+      "accounts": [
+        {
+          "name": "session_signer",
+          "docs": [
+            "The ephemeral browser keypair — signs tx without wallet popup."
+          ],
+          "signer": true
+        },
+        {
+          "name": "session_token",
+          "docs": [
+            "Session token proving the ephemeral key is authorized by a real wallet.",
+            "Lives on L1 (never delegated). ER clones it as read-only."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "auction_state"
+              },
+              {
+                "kind": "account",
+                "path": "session_token.bidder",
+                "account": "SessionToken"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auction_state",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "process_undelegation",
       "discriminator": [
         196,
@@ -2257,6 +2405,19 @@
         255,
         48
       ]
+    },
+    {
+      "name": "SessionToken",
+      "discriminator": [
+        233,
+        4,
+        115,
+        14,
+        46,
+        21,
+        1,
+        15
+      ]
     }
   ],
   "events": [
@@ -2505,6 +2666,16 @@
       "code": 6027,
       "name": "GracePeriodNotElapsed",
       "msg": "Grace period has not elapsed — bidders still have time to claim refunds"
+    },
+    {
+      "code": 6028,
+      "name": "SessionSignerMismatch",
+      "msg": "Session signer does not match the session token"
+    },
+    {
+      "code": 6029,
+      "name": "SessionBidderMismatch",
+      "msg": "Session token bidder does not match expected bidder"
     }
   ],
   "types": [
@@ -2895,6 +3066,53 @@
           {
             "name": "amount",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SessionToken",
+      "docs": [
+        "Session key token — links an ephemeral browser keypair to a real wallet.",
+        "Seeds: [b\"session\", auction_state.key(), bidder.key()]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "auction",
+            "docs": [
+              "The auction this session is scoped to"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bidder",
+            "docs": [
+              "The REAL wallet (used for settlement, deposit matching, anti-shill)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "session_signer",
+            "docs": [
+              "The ephemeral browser keypair that can sign bids without wallet popups"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "When this session was created (informational)"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed"
+            ],
+            "type": "u8"
           }
         ]
       }

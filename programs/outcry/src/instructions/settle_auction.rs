@@ -184,15 +184,13 @@ pub struct SettleAuction<'info> {
 }
 
 pub fn handle_settle_auction(ctx: Context<SettleAuction>) -> Result<()> {
-    let auction = &mut ctx.accounts.auction_state;
-
-    // ATOMIC: Set Settled immediately to prevent double-settle attacks.
-    // If anything below fails, the auction is still Settled — but that's safer
-    // than allowing two concurrent settlements to both transfer funds.
-    auction.status = AuctionStatus::Settled;
-
-    let winning_bid = auction.current_bid;
-    let winner_key = auction.highest_bidder;
+    // Extract all values from auction_state upfront so we can release the
+    // mutable borrow before the NFT transfer CPI (which needs an immutable
+    // borrow of auction_state for PDA signer authority).
+    let winning_bid = ctx.accounts.auction_state.current_bid;
+    let winner_key = ctx.accounts.auction_state.highest_bidder;
+    let seller_key = ctx.accounts.auction_state.seller;
+    let auction_bump = ctx.accounts.auction_state.bump;
 
     // Deduct winning bid from winner's deposit
     let winner_deposit = &mut ctx.accounts.winner_deposit;
@@ -286,14 +284,12 @@ pub fn handle_settle_auction(ctx: Context<SettleAuction>) -> Result<()> {
     **seller_info.try_borrow_mut_lamports()? += seller_receives;
 
     // --- Transfer NFT from escrow to winner ---
-    let seller_key = auction.seller;
     let nft_mint_key = ctx.accounts.nft_mint.key();
-    let bump = auction.bump;
     let signer_seeds: &[&[&[u8]]] = &[&[
         AUCTION_SEED,
         seller_key.as_ref(),
         nft_mint_key.as_ref(),
-        &[bump],
+        &[auction_bump],
     ]];
 
     token::transfer(
@@ -308,6 +304,12 @@ pub fn handle_settle_auction(ctx: Context<SettleAuction>) -> Result<()> {
         ),
         1,
     )?;
+
+    // Mark as Settled after all transfers succeed.
+    // Double-settle is already prevented by the Anchor constraint
+    // `status == AuctionStatus::Ended` — a second call fails validation.
+    // Solana transactions are atomic, so on failure everything reverts.
+    ctx.accounts.auction_state.status = AuctionStatus::Settled;
 
     emit!(AuctionSettled {
         auction: ctx.accounts.auction_state.key(),

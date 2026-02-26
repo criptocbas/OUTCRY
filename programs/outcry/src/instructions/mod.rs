@@ -12,6 +12,8 @@ pub mod cancel_auction;
 pub mod close_auction;
 pub mod forfeit_auction;
 pub mod force_close_auction;
+pub mod create_session;
+pub mod place_bid_session;
 
 #[allow(ambiguous_glob_reexports)]
 pub use create_auction::*;
@@ -41,3 +43,7 @@ pub use close_auction::*;
 pub use forfeit_auction::*;
 #[allow(ambiguous_glob_reexports)]
 pub use force_close_auction::*;
+#[allow(ambiguous_glob_reexports)]
+pub use create_session::*;
+#[allow(ambiguous_glob_reexports)]
+pub use place_bid_session::*;

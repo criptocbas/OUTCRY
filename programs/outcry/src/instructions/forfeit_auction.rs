@@ -78,9 +78,6 @@ pub struct ForfeitAuction<'info> {
 }
 
 pub fn handle_forfeit_auction(ctx: Context<ForfeitAuction>) -> Result<()> {
-    // ATOMIC: Set Settled immediately to prevent double-forfeit attacks.
-    ctx.accounts.auction_state.status = AuctionStatus::Settled;
-
     let winning_bid = ctx.accounts.auction_state.current_bid;
     let highest_bidder = ctx.accounts.auction_state.highest_bidder;
     let seller_key = ctx.accounts.auction_state.seller;
@@ -156,6 +153,10 @@ pub fn handle_forfeit_auction(ctx: Context<ForfeitAuction>) -> Result<()> {
         ),
         1,
     )?;
+
+    // Mark as Settled after all transfers succeed.
+    // Double-forfeit prevented by constraint `status == AuctionStatus::Ended`.
+    ctx.accounts.auction_state.status = AuctionStatus::Settled;
 
     emit!(AuctionSettled {
         auction: ctx.accounts.auction_state.key(),

@@ -101,4 +101,16 @@ pub mod outcry {
     pub fn force_close_auction(ctx: Context<ForceCloseAuction>) -> Result<()> {
         instructions::force_close_auction::handle_force_close_auction(ctx)
     }
+
+    /// Creates a session token linking an ephemeral browser keypair to the
+    /// real wallet. One popup to authorize, then all bids are instant.
+    pub fn create_session(ctx: Context<CreateSession>, session_signer: Pubkey) -> Result<()> {
+        instructions::create_session::handle_create_session(ctx, session_signer)
+    }
+
+    /// Places a bid using a session key (ephemeral signer). No wallet popup.
+    /// The session token resolves the real wallet for settlement + anti-shill.
+    pub fn place_bid_session(ctx: Context<PlaceBidSession>, amount: u64) -> Result<()> {
+        instructions::place_bid_session::handle_place_bid_session(ctx, amount)
+    }
 }

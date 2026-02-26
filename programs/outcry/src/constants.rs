@@ -25,3 +25,4 @@ pub const FORCE_CLOSE_GRACE_PERIOD: i64 = 604_800; // 7 days
 pub const AUCTION_SEED: &[u8] = b"auction";
 pub const VAULT_SEED: &[u8] = b"vault";
 pub const DEPOSIT_SEED: &[u8] = b"deposit";
+pub const SESSION_SEED: &[u8] = b"session";

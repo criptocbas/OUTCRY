@@ -58,4 +58,8 @@ pub enum OutcryError {
     InsufficientVaultBalance,
     #[msg("Grace period has not elapsed — bidders still have time to claim refunds")]
     GracePeriodNotElapsed,
+    #[msg("Session signer does not match the session token")]
+    SessionSignerMismatch,
+    #[msg("Session token bidder does not match expected bidder")]
+    SessionBidderMismatch,
 }
