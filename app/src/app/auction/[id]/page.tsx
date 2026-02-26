@@ -701,6 +701,24 @@ export default function AuctionRoomPage({
   }, [auction, actions, id, addToast, refetch, refetchDeposit, publicKey]);
 
   // -------------------------------------------------------------------------
+  // Emergency refund (stuck delegation — auction state owned by delegation program)
+  // -------------------------------------------------------------------------
+  const handleEmergencyRefund = useCallback(async () => {
+    if (!publicKey) return;
+    setActionLoading(true);
+    try {
+      const sig = await actions.emergencyRefund(new PublicKey(id));
+      addToast("Emergency refund successful!", "success", explorerUrl(sig));
+      await Promise.all([refetch(), refetchDeposit()]).catch(() => {});
+    } catch (err: unknown) {
+      const msg = extractErrorMessage(err, "Emergency refund failed");
+      addToast(msg, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [actions, id, addToast, refetch, refetchDeposit, publicKey]);
+
+  // -------------------------------------------------------------------------
   // Cancel auction (seller only, Created status)
   // -------------------------------------------------------------------------
   const handleCancel = useCallback(async () => {
@@ -1276,6 +1294,18 @@ export default function AuctionRoomPage({
                   className="flex h-12 w-full items-center justify-center rounded-md border border-gold/40 text-sm font-medium tracking-[0.15em] text-gold uppercase transition-all duration-200 hover:border-gold hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {actionLoading ? <Spinner /> : "Claim Refund"}
+                </button>
+              )}
+
+              {/* Emergency refund — when auction is stuck in ER delegation */}
+              {isDelegated && userDeposit != null && userDeposit > 0 && publicKey && (
+                <button
+                  onClick={handleEmergencyRefund}
+                  disabled={actionLoading}
+                  aria-label={`Emergency refund of ${formatSOL(userDeposit)} SOL`}
+                  className="flex h-12 w-full items-center justify-center rounded-md border border-amber-500/40 bg-amber-500/10 text-sm font-medium tracking-[0.15em] text-amber-400 uppercase transition-all duration-200 hover:border-amber-500 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {actionLoading ? <Spinner /> : `Emergency Refund (${formatSOL(userDeposit)} SOL)`}
                 </button>
               )}
 

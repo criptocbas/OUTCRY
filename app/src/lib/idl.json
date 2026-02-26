@@ -1250,6 +1250,94 @@
       ]
     },
     {
+      "name": "emergency_refund",
+      "docs": [
+        "Emergency refund for deposits stuck in a delegated (ER-stuck) auction.",
+        "Uses UncheckedAccount for auction_state since the owner is the delegation",
+        "program, not our program. Only works when auction IS delegated."
+      ],
+      "discriminator": [
+        188,
+        73,
+        52,
+        195,
+        137,
+        70,
+        180,
+        147
+      ],
+      "accounts": [
+        {
+          "name": "bidder",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "auction_state",
+          "docs": [
+            "The auction state account — may be owned by the delegation program",
+            "when stuck. We use UncheckedAccount and verify manually.",
+            "We also verify it is NOT owned by our program (emergency condition)."
+          ]
+        },
+        {
+          "name": "bidder_deposit",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "auction_state"
+              },
+              {
+                "kind": "account",
+                "path": "bidder"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auction_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "auction_state"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "end_auction",
       "docs": [
         "Sets auction to Ended. Call on ER when delegated, or L1 if not."

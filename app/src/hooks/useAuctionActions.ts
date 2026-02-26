@@ -79,6 +79,9 @@ export interface UseAuctionActionsReturn {
   /** Close a Settled/Cancelled auction (seller only). Reclaims rent from all accounts. */
   closeAuction: (auctionStatePubkey: PublicKey, nftMint: PublicKey) => Promise<string>;
 
+  /** Emergency refund for deposits stuck in a delegated (ER-stuck) auction. */
+  emergencyRefund: (auctionStatePubkey: PublicKey) => Promise<string>;
+
   /** True when the wallet is connected and actions are available. */
   ready: boolean;
 }
@@ -858,6 +861,34 @@ export function useAuctionActions(): UseAuctionActionsReturn {
     [l1Program, publicKey]
   );
 
+  // -----------------------------------------------------------------------
+  // emergencyRefund (L1 — recover deposits from stuck/delegated auctions)
+  // -----------------------------------------------------------------------
+  const emergencyRefund = useCallback(
+    async (auctionStatePubkey: PublicKey): Promise<string> => {
+      if (!l1Program || !publicKey) {
+        throw new Error("Wallet not connected");
+      }
+
+      const [auctionVault] = getVaultPDA(auctionStatePubkey);
+      const [bidderDeposit] = getDepositPDA(auctionStatePubkey, publicKey);
+
+      const sig = await l1Program.methods
+        .emergencyRefund()
+        .accounts({
+          bidder: publicKey,
+          auctionState: auctionStatePubkey,
+          bidderDeposit,
+          auctionVault,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      return sig;
+    },
+    [l1Program, publicKey]
+  );
+
   return {
     createAuction,
     deposit,
@@ -872,6 +903,7 @@ export function useAuctionActions(): UseAuctionActionsReturn {
     forfeitAuction,
     cancelAuction,
     closeAuction,
+    emergencyRefund,
     ready: !!l1Program && !!publicKey,
   };
 }

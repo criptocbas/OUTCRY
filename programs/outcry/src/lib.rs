@@ -113,4 +113,11 @@ pub mod outcry {
     pub fn place_bid_session(ctx: Context<PlaceBidSession>, amount: u64) -> Result<()> {
         instructions::place_bid_session::handle_place_bid_session(ctx, amount)
     }
+
+    /// Emergency refund for deposits stuck in a delegated (ER-stuck) auction.
+    /// Uses UncheckedAccount for auction_state since the owner is the delegation
+    /// program, not our program. Only works when auction IS delegated.
+    pub fn emergency_refund(ctx: Context<EmergencyRefund>) -> Result<()> {
+        instructions::emergency_refund::handle_emergency_refund(ctx)
+    }
 }
