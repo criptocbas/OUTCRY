@@ -1297,8 +1297,8 @@ export default function AuctionRoomPage({
                 </button>
               )}
 
-              {/* Emergency refund — when auction is stuck in ER delegation */}
-              {isDelegated && userDeposit != null && userDeposit > 0 && publicKey && (
+              {/* Emergency refund — only when auction is stuck (delegated + expired + still Active) */}
+              {isDelegated && isActive && timerExpired && userDeposit != null && userDeposit > 0 && publicKey && (
                 <button
                   onClick={handleEmergencyRefund}
                   disabled={actionLoading}
