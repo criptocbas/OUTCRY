@@ -19,7 +19,6 @@ pub struct UndelegateAuction<'info> {
     #[account(
         mut,
         constraint = auction_state.status == AuctionStatus::Ended @ OutcryError::InvalidAuctionStatus,
-        constraint = auction_state.seller == payer.key() @ OutcryError::UnauthorizedSeller,
     )]
     pub auction_state: Account<'info, AuctionState>,
 }

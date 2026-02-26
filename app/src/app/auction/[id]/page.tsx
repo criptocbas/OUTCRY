@@ -22,7 +22,7 @@ import Spinner from "@/components/ui/Spinner";
 import { useTapestryProfile, prefetchProfiles } from "@/hooks/useTapestryProfile";
 import { useNftMetadata } from "@/hooks/useNftMetadata";
 import { getProfile, createContent } from "@/lib/tapestry";
-import { getAuctionBidders, getDepositPDA } from "@/lib/program";
+import { getAuctionBidders, getDepositPDA, getReadOnlyProgram } from "@/lib/program";
 import { DELEGATION_PROGRAM_ID, DEVNET_RPC, MAGIC_ROUTER_RPC } from "@/lib/constants";
 import NftImage from "@/components/auction/NftImage";
 
@@ -482,8 +482,32 @@ export default function AuctionRoomPage({
     setProgressLabel(null);
 
     try {
+      // Refetch fresh state to avoid acting on stale data
+      setProgressLabel("Checking auction state...");
+      const auctionPubkey = new PublicKey(id);
+      const [delegationRecord] = PublicKey.findProgramAddressSync(
+        [Buffer.from("delegation"), auctionPubkey.toBuffer()],
+        DELEGATION_PROGRAM_ID
+      );
+
+      // Fetch delegation status and auction state in parallel
+      const readProgram = getReadOnlyProgram(l1Connection);
+      const [delegationInfo, freshAuctionRaw] = await Promise.all([
+        l1Connection.getAccountInfo(delegationRecord),
+        (readProgram.account as Record<string, { fetchNullable: (key: PublicKey) => Promise<unknown> }>)["auctionState"]
+          .fetchNullable(auctionPubkey)
+          .catch(() => null),
+      ]);
+      const freshIsDelegated = delegationInfo !== null;
+
+      // Use fresh data if available, fall back to current React state
+      type AuctionLike = { status: Parameters<typeof parseAuctionStatus>[0]; nftMint: PublicKey; seller: PublicKey; highestBidder: PublicKey; currentBid: { toNumber: () => number } };
+      const freshAuction = (freshAuctionRaw as AuctionLike | null) ?? auction;
+      const freshStatus = freshAuction ? parseAuctionStatus(freshAuction.status) : statusLabel;
+      const freshIsActive = freshStatus === "Active";
+
       // Step 1: End auction if timer expired but status is still Active
-      if (isActive && timerExpired) {
+      if (freshIsActive && timerExpired) {
         setProgressLabel("Ending auction...");
         try {
           await actions.endAuction(new PublicKey(id));
@@ -502,7 +526,7 @@ export default function AuctionRoomPage({
       }
 
       // Step 2: Undelegate from ER (if delegated)
-      if (isDelegated) {
+      if (freshIsDelegated) {
         setProgressLabel("Returning state to L1...");
         try {
           await actions.undelegateAuction(new PublicKey(id));
@@ -519,11 +543,6 @@ export default function AuctionRoomPage({
 
         // Poll L1 to verify state is back (up to 30 seconds)
         setProgressLabel("Waiting for L1 confirmation...");
-        const auctionPubkey = new PublicKey(id);
-        const [delegationRecord] = PublicKey.findProgramAddressSync(
-          [Buffer.from("delegation"), auctionPubkey.toBuffer()],
-          DELEGATION_PROGRAM_ID
-        );
         let stateOnL1 = false;
         for (let attempt = 0; attempt < 15; attempt++) {
           await new Promise((r) => setTimeout(r, 2000));
@@ -544,14 +563,27 @@ export default function AuctionRoomPage({
         addToast("State confirmed on L1", "success");
       }
 
-      // Step 3: Settle
+      // Step 3: Settle (use freshAuction for latest on-chain data)
+      if (!freshAuction) {
+        throw new Error("Could not read auction state. Please refresh and try again.");
+      }
+
+      // If already settled/cancelled, skip
+      if (freshStatus === "Settled" || freshStatus === "Cancelled") {
+        addToast(`Auction already ${freshStatus.toLowerCase()}`, "success");
+        await refetch();
+        setActionLoading(false);
+        setProgressLabel(null);
+        return;
+      }
+
       setProgressLabel("Settling auction...");
       try {
         const settleSig = await actions.settleAuction(
-          new PublicKey(id),
-          auction.nftMint,
-          auction.seller,
-          auction.highestBidder
+          auctionPubkey,
+          freshAuction.nftMint,
+          freshAuction.seller,
+          freshAuction.highestBidder
         );
         addToast("Auction settled!", "success", explorerUrl(settleSig));
       } catch (settleErr: unknown) {
@@ -561,10 +593,10 @@ export default function AuctionRoomPage({
         if (settleMsg.includes("InsufficientDeposit") || settleMsg.includes("0x1776")) {
           setProgressLabel("Winner defaulted — forfeiting auction...");
           const forfeitSig = await actions.forfeitAuction(
-            new PublicKey(id),
-            auction.nftMint,
-            auction.seller,
-            auction.highestBidder
+            auctionPubkey,
+            freshAuction.nftMint,
+            freshAuction.seller,
+            freshAuction.highestBidder
           );
           addToast("Auction forfeited — NFT returned to seller, winner deposit slashed", "success", explorerUrl(forfeitSig));
         } else {
@@ -575,9 +607,9 @@ export default function AuctionRoomPage({
 
       // Post auction result to Tapestry (best-effort)
       if (publicKey) {
-        const winnerAddr = auction.highestBidder?.toBase58() ?? "unknown";
-        const winBid = formatSOL(auction.currentBid.toNumber());
-        const content = `Auction settled! NFT ${truncateAddress(auction.nftMint.toBase58())} sold for ${winBid} SOL to ${truncateAddress(winnerAddr)}. Going, going, onchain.`;
+        const winnerAddr = freshAuction.highestBidder?.toBase58() ?? "unknown";
+        const winBid = formatSOL(freshAuction.currentBid.toNumber());
+        const content = `Auction settled! NFT ${truncateAddress(freshAuction.nftMint.toBase58())} sold for ${winBid} SOL to ${truncateAddress(winnerAddr)}. Going, going, onchain.`;
 
         getProfile(publicKey.toBase58())
           .then((profile) => {
@@ -585,9 +617,9 @@ export default function AuctionRoomPage({
               return createContent(profile.profile.id, content, {
                 auctionId: id,
                 type: "auction_settled",
-                nftMint: auction.nftMint.toBase58(),
+                nftMint: freshAuction.nftMint.toBase58(),
                 winner: winnerAddr,
-                amount: auction.currentBid.toString(),
+                amount: freshAuction.currentBid.toString(),
               });
             }
           })
@@ -641,7 +673,7 @@ export default function AuctionRoomPage({
       setActionLoading(false);
       setProgressLabel(null);
     }
-  }, [auction, actions, id, addToast, refetch, publicKey, isDelegated, isActive, timerExpired, l1Connection, nftMetadata]);
+  }, [auction, actions, id, addToast, refetch, refetchDeposit, publicKey, timerExpired, l1Connection, nftMetadata]);
 
   // -------------------------------------------------------------------------
   // Claim refund
