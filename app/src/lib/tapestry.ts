@@ -122,7 +122,11 @@ export async function getProfile(
 
     return { profile, socialCounts };
   } catch (err) {
-    console.error("[tapestry] getProfile failed for", walletAddress, err);
+    // "Profile not found" is normal — not every wallet has a Tapestry profile.
+    const msg = err instanceof Error ? err.message : "";
+    if (!msg.includes("not found") && !msg.includes("404")) {
+      console.error("[tapestry] getProfile failed for", walletAddress, err);
+    }
     return null;
   }
 }
