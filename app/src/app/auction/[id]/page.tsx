@@ -655,7 +655,14 @@ export default function AuctionRoomPage({
       await Promise.all([refetch(), refetchDeposit()]);
     } catch (err: unknown) {
       const msg = extractErrorMessage(err, "Refund failed");
-      addToast(msg, "error");
+      // Deposit PDA may already be closed (refunded by seller via "Refund All")
+      if (msg.includes("NothingToRefund") || msg.includes("not found") || msg.includes("AccountNotFound") || msg.includes("0xbc4")) {
+        addToast("Your deposit was already refunded!", "success");
+      } else {
+        addToast(msg, "error");
+      }
+      // Refresh state either way so UI reflects current on-chain state
+      await Promise.all([refetch(), refetchDeposit()]).catch(() => {});
     } finally {
       setActionLoading(false);
     }
