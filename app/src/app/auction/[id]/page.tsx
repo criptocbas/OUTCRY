@@ -607,13 +607,18 @@ export default function AuctionRoomPage({
         if (settleMsg.includes("InsufficientDeposit") || settleMsg.includes("0x1776")
             || settleMsg.includes("AccountNotInitialized") || settleMsg.includes("3012")) {
           setProgressLabel("Winner defaulted — forfeiting auction...");
-          const forfeitSig = await actions.forfeitAuction(
-            auctionPubkey,
-            freshAuction.nftMint,
-            freshAuction.seller,
-            freshAuction.highestBidder
-          );
-          addToast("Auction forfeited — NFT returned to seller, winner deposit slashed", "success", explorerUrl(forfeitSig));
+          try {
+            const forfeitSig = await actions.forfeitAuction(
+              auctionPubkey,
+              freshAuction.nftMint,
+              freshAuction.seller,
+              freshAuction.highestBidder
+            );
+            addToast("Auction forfeited — NFT returned to seller, winner deposit slashed", "success", explorerUrl(forfeitSig));
+          } catch (forfeitErr: unknown) {
+            console.error("[handleSettle] forfeit also failed:", forfeitErr);
+            throw new Error(`Winner has no deposit. Settlement failed and forfeit failed: ${forfeitErr instanceof Error ? forfeitErr.message : String(forfeitErr)}`);
+          }
         } else {
           throw new Error(`Settle failed: ${settleMsg || "Unknown error"}`);
         }

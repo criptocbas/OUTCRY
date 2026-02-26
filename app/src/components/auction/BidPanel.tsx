@@ -161,6 +161,18 @@ export default function BidPanel({
         </p>
       ) : (
         <>
+          {/* Session active indicator (above bid controls) */}
+          {sessionActive && (
+            <div className="flex items-center justify-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-xs font-medium text-emerald-400">Quick Bidding Active</span>
+              <span className="text-[10px] text-cream/20">&mdash; no popups</span>
+            </div>
+          )}
+
           {/* Quick bid buttons */}
           <div className="flex gap-2">
             {quickBids.map((qb) => (
@@ -303,8 +315,8 @@ export default function BidPanel({
             </button>
           )}
 
-          {/* Session key toggle (only for active auctions, not deposit-only) */}
-          {!depositOnly && onEnableSession && (
+          {/* Session key toggle (only for active auctions, not deposit-only, not already active) */}
+          {!depositOnly && onEnableSession && !sessionActive && (
             <>
               <div className="flex items-center gap-3">
                 <div className="h-px flex-1 bg-charcoal-light" />
@@ -312,16 +324,7 @@ export default function BidPanel({
                 <div className="h-px flex-1 bg-charcoal-light" />
               </div>
 
-              {sessionActive ? (
-                <div className="flex items-center justify-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                  </span>
-                  <span className="text-xs font-medium text-emerald-400">Quick Bidding Active</span>
-                  <span className="text-[10px] text-cream/20">&mdash; no popups</span>
-                </div>
-              ) : showSessionSetup ? (
+              {showSessionSetup ? (
                 /* Session setup: deposit input + tip */
                 <div className="flex flex-col gap-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
                   {(userDeposit ?? 0) > 0 ? (
