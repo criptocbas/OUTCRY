@@ -856,12 +856,18 @@ export default function AuctionRoomPage({
       const auctionPubkey = new PublicKey(id);
       const bidders = await getAuctionBidders(l1Connection, auctionPubkey);
 
-      // Include ALL bidders (including winner — they may have excess deposit after settlement)
+      // Include only bidders with non-zero deposits. After settlement the
+      // winner's BidderDeposit PDA still exists but amount may be 0 (winning
+      // bid was deducted). Trying to refund a zero-balance PDA fails on-chain.
       const activeBidders: PublicKey[] = [];
       for (const bidder of bidders) {
         const [depositPDA] = getDepositPDA(auctionPubkey, bidder);
         const info = await l1Connection.getAccountInfo(depositPDA);
-        if (info) activeBidders.push(bidder);
+        if (info && info.data.length >= 80) {
+          // BidderDeposit layout: discriminator(8) + auction(32) + bidder(32) + amount(8)
+          const amount = Number(info.data.readBigUInt64LE(72));
+          if (amount > 0) activeBidders.push(bidder);
+        }
       }
 
       if (activeBidders.length === 0) {
@@ -883,8 +889,10 @@ export default function AuctionRoomPage({
           );
         } catch (err: unknown) {
           const msg = extractErrorMessage(err, "Refund failed");
-          // Skip NothingToRefund errors (already zeroed)
-          if (!msg.includes("NothingToRefund")) {
+          // Skip NothingToRefund errors (already zeroed) — match both
+          // camelCase error code and human-readable "Nothing to refund"
+          const isNothingToRefund = /nothing.?to.?refund/i.test(msg);
+          if (!isNothingToRefund) {
             addToast(`Failed to refund ${truncateAddress(bidder.toBase58())}: ${msg}`, "error");
           }
         }
