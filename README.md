@@ -9,12 +9,19 @@
 </p>
 
 <p align="center">
+  <a href="https://youtu.be/IUS9oxn_54c"><strong>Demo Video</strong></a> &middot;
   <a href="https://outcry.vercel.app/"><strong>Live Demo</strong></a> &middot;
   <a href="#architecture">Architecture</a> &middot;
   <a href="#getting-started">Getting Started</a> &middot;
   <a href="#program">Program</a> &middot;
   <a href="#frontend">Frontend</a> &middot;
   <a href="#bounties">Bounties</a>
+</p>
+
+<p align="center">
+  <a href="https://youtu.be/IUS9oxn_54c">
+    <img src="https://img.youtube.com/vi/IUS9oxn_54c/maxresdefault.jpg" alt="OUTCRY Demo" width="600" />
+  </a>
 </p>
 
 ---
