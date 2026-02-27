@@ -20,7 +20,7 @@ Pre-create an auction that's already Active and delegated to ER. Then you skip t
 
 | Say This | Hits Bounty |
 |---|---|
-| "Sub-second bids via Ephemeral Rollups" / "First non-gaming use of ER" | **MagicBlock** ($5K) |
+| "Real-time bids via Ephemeral Rollups" / "First non-gaming use of ER" | **MagicBlock** ($5K) |
 | "Royalties enforced from Metaplex metadata at settlement" | **Exchange Art** ($5K) |
 | "Tapestry-powered profiles, follows, likes, comments" | **Tapestry** ($5K) |
 | "Compressed NFT badges via Bubblegum" | **DRiP** ($2.5K) |
@@ -35,7 +35,7 @@ Pre-create an auction that's already Active and delegated to ER. Then you skip t
 >
 > "This is OUTCRY — a real-time live auction protocol on Solana.
 >
-> The problem with onchain auctions today is speed. Solana's 400-millisecond block times make competitive bidding feel sluggish. OUTCRY solves this with MagicBlock Ephemeral Rollups — every bid confirms in under 50 milliseconds.
+> The problem with onchain auctions today is speed. Solana's 400-millisecond block times make competitive bidding feel sluggish. OUTCRY solves this with MagicBlock Ephemeral Rollups — bids confirm onchain in a fraction of a second.
 >
 > But speed alone isn't enough. We built a deposit-then-bid architecture where all SOL stays safely on L1 while only the auction state enters the rollup. The Ephemeral Rollup never touches money."
 
@@ -59,7 +59,7 @@ Pre-create an auction that's already Active and delegated to ER. Then you skip t
 
 **Key visual:** The progress labels cycling ("Starting auction...", "Delegating to ER...", "Syncing..."), then the green "ER Live" badge appearing with its pulsing glow.
 
-> "See that green badge? The auction state is now running on an Ephemeral Rollup. Sub-50ms bidding is live."
+> "See that green badge? The auction state is now running on an Ephemeral Rollup. Real-time bidding is live."
 
 ---
 
@@ -81,11 +81,11 @@ Pre-create an auction that's already Active and delegated to ER. Then you skip t
 
 **Key visuals to call out:**
 - The golden bid flash animation on each new bid
-- The bid speed indicator: "Last bid: 38ms via Ephemeral Rollup"
+- The green MagicBlock ER card showing live round-trip latency (e.g. "325ms")
 - The countdown timer (mention anti-sniping if a bid lands near the end)
 - The bid amount scaling animation
 
-> "38 milliseconds. That's faster than a blink. And notice — the SOL I deposited never left L1. The Ephemeral Rollup only tracks who's winning and for how much. Settlement happens back on L1 with full deposit verification."
+> "See that green card? That's the round-trip time — from my browser, through MagicBlock's Ephemeral Rollup, and back. An onchain bid confirmed in under half a second. And notice — the SOL I deposited never left L1. The Ephemeral Rollup only tracks who's winning and for how much. Settlement happens back on L1 with full deposit verification."
 
 **[If you have time, switch back to Window A briefly to show the seller's view updating in real-time]**
 
@@ -120,6 +120,7 @@ Pre-create an auction that's already Active and delegated to ER. Then you skip t
 **Key visuals:**
 - Progress steps cycling through
 - Success toast with Explorer link
+- Settlement breakdown showing royalty split, protocol fee, and seller proceeds
 - "Settled" status badge (gold)
 
 > "Two badge types: Contender for every bidder, Victor for the winner. Compressed NFTs via Bubblegum — permanent onchain proof of participation."
@@ -128,7 +129,7 @@ Pre-create an auction that's already Active and delegated to ER. Then you skip t
 
 ### CLOSE — The Vision (2:50 – 3:00)
 
-> "OUTCRY brings MagicBlock Ephemeral Rollups beyond gaming — into real-time commerce. Sub-50ms bidding, deposits safe on L1, social identity, and onchain royalty enforcement.
+> "OUTCRY brings MagicBlock Ephemeral Rollups beyond gaming — into real-time commerce. Instant bidding, deposits safe on L1, social identity, and onchain royalty enforcement.
 >
 > Going, going, onchain."
 

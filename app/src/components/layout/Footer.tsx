@@ -49,11 +49,7 @@ export default function Footer() {
             <TechSep />
             <TechLink href="https://solana.com" label="Solana" />
             <TechSep />
-            <TechLink href="https://exchange.art" label="Exchange Art" />
-            <TechSep />
             <TechLink href="https://usetapestry.dev" label="Tapestry" />
-            <TechSep />
-            <TechLink href="https://drip.haus" label="DRiP" />
             <TechSep />
             <TechLink href="https://metaplex.com" label="Metaplex" />
           </div>
