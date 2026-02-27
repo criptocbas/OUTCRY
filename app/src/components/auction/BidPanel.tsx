@@ -241,28 +241,13 @@ export default function BidPanel({
 
           {/* Session mode: deposit insufficient warning + top up */}
           {sessionActive && !hasEnoughDeposit && bidLamports >= minBid && (
-            <div className="flex flex-col gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
-              <p className="text-center text-[11px] text-amber-400/80">
-                Your deposit ({formatSOL(userDeposit ?? 0)} SOL) doesn&apos;t cover this bid.
-                Top up to continue quick bidding.
-              </p>
-              {onTopUpDeposit && (
-                <button
-                  onClick={() => onTopUpDeposit(depositNeeded)}
-                  disabled={isLoading}
-                  className="flex h-9 w-full items-center justify-center rounded-md border border-amber-500/40 text-xs font-medium text-amber-400 transition-all hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Spinner />
-                      <span className="text-xs normal-case tracking-normal">{progressLabel ?? "Depositing..."}</span>
-                    </div>
-                  ) : (
-                    `Top Up ${formatSOL(depositNeeded)} SOL`
-                  )}
-                </button>
-              )}
-            </div>
+            <TopUpPanel
+              depositNeeded={depositNeeded}
+              userDeposit={userDeposit ?? 0}
+              isLoading={isLoading}
+              progressLabel={progressLabel}
+              onTopUpDeposit={onTopUpDeposit}
+            />
           )}
 
           {/* Confirmation dialog (skipped in session mode) */}
@@ -423,6 +408,115 @@ export default function BidPanel({
             </>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TopUpPanel — shown when session deposit is insufficient for the current bid
+// ---------------------------------------------------------------------------
+
+function TopUpPanel({
+  depositNeeded,
+  userDeposit,
+  isLoading,
+  progressLabel,
+  onTopUpDeposit,
+}: {
+  depositNeeded: number;
+  userDeposit: number;
+  isLoading: boolean;
+  progressLabel?: string | null;
+  onTopUpDeposit?: (amount: number) => void;
+}) {
+  const [showCustom, setShowCustom] = useState(false);
+  const [customInput, setCustomInput] = useState("");
+
+  if (!onTopUpDeposit) return null;
+
+  const customLamports = parseSolToLamports(customInput);
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+      <p className="text-center text-[11px] text-amber-400/80">
+        Your deposit ({formatSOL(userDeposit)} SOL) doesn&apos;t cover this bid.
+        Top up to continue quick bidding.
+      </p>
+
+      {isLoading ? (
+        <div className="flex h-9 items-center justify-center gap-2">
+          <Spinner />
+          <span className="text-xs text-amber-400 normal-case tracking-normal">
+            {progressLabel ?? "Depositing..."}
+          </span>
+        </div>
+      ) : showCustom ? (
+        /* Custom amount input */
+        <div className="flex flex-col gap-2">
+          <div className="relative">
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              value={customInput}
+              onChange={(e) => setCustomInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && customLamports > 0) {
+                  onTopUpDeposit(customLamports);
+                  setShowCustom(false);
+                }
+              }}
+              placeholder={formatSOL(depositNeeded)}
+              autoFocus
+              aria-label="Custom top-up amount in SOL"
+              className="w-full rounded-md border border-amber-500/30 bg-jet px-3 py-2 pr-12 text-right text-sm tabular-nums text-cream outline-none transition-colors focus:border-amber-500/60"
+            />
+            <span className="absolute top-1/2 right-3 -translate-y-1/2 text-[10px] text-cream/30 uppercase">
+              SOL
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCustom(false)}
+              className="flex h-8 flex-1 items-center justify-center rounded-md border border-charcoal-light text-[11px] font-medium text-cream/40 transition-all hover:border-cream/20"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (customLamports > 0) {
+                  onTopUpDeposit(customLamports);
+                  setShowCustom(false);
+                }
+              }}
+              disabled={customLamports <= 0}
+              className="flex h-8 flex-1 items-center justify-center rounded-md border border-amber-500/40 text-[11px] font-medium text-amber-400 transition-all hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Top Up {customLamports > 0 ? `${formatSOL(customLamports)} SOL` : ""}
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Quick top-up buttons */
+        <div className="flex flex-col gap-1.5">
+          <button
+            onClick={() => onTopUpDeposit(depositNeeded)}
+            className="flex h-9 w-full items-center justify-center rounded-md border border-amber-500/40 text-xs font-medium text-amber-400 transition-all hover:bg-amber-500/10"
+          >
+            Top Up {formatSOL(depositNeeded)} SOL
+            <span className="ml-1.5 text-[10px] text-amber-400/40">(covers this bid)</span>
+          </button>
+          <button
+            onClick={() => {
+              setCustomInput("");
+              setShowCustom(true);
+            }}
+            className="flex h-8 w-full items-center justify-center rounded-md text-[11px] text-amber-400/50 transition-colors hover:text-amber-400/80"
+          >
+            Custom amount
+          </button>
+        </div>
       )}
     </div>
   );
