@@ -516,9 +516,10 @@ export default function AuctionRoomPage({
       const freshIsDelegated = delegationInfo !== null;
 
       // Use fresh data if available, fall back to current React state
+      // NOTE: `let` because these are re-fetched after undelegation to get committed ER state
       type AuctionLike = { status: Parameters<typeof parseAuctionStatus>[0]; nftMint: PublicKey; seller: PublicKey; highestBidder: PublicKey; currentBid: { toNumber: () => number } };
-      const freshAuction = (freshAuctionRaw as AuctionLike | null) ?? auction;
-      const freshStatus = freshAuction ? parseAuctionStatus(freshAuction.status) : statusLabel;
+      let freshAuction = (freshAuctionRaw as AuctionLike | null) ?? auction;
+      let freshStatus = freshAuction ? parseAuctionStatus(freshAuction.status) : statusLabel;
       const freshIsActive = freshStatus === "Active";
 
       // Step 1: End auction if timer expired but status is still Active
@@ -576,6 +577,18 @@ export default function AuctionRoomPage({
           throw new Error("Timed out waiting for state to return to L1. Try again in a few seconds.");
         }
         addToast("State confirmed on L1", "success");
+
+        // Re-fetch auction state from L1 after undelegation — the data fetched
+        // earlier may be stale (pre-delegation snapshot). This ensures we have
+        // the committed ER state (correct highest_bidder, bid_count, etc.)
+        setProgressLabel("Reading final auction state...");
+        const refetchedRaw = await (readProgram.account as Record<string, { fetchNullable: (key: PublicKey) => Promise<unknown> }>)["auctionState"]
+          .fetchNullable(auctionPubkey)
+          .catch(() => null);
+        if (refetchedRaw) {
+          freshAuction = refetchedRaw as AuctionLike;
+          freshStatus = parseAuctionStatus(freshAuction.status);
+        }
       }
 
       // Step 3: Settle (use freshAuction for latest on-chain data)
