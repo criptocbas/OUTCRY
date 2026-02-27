@@ -1099,7 +1099,8 @@ export default function AuctionRoomPage({
                   </span>
                 )}
               </div>
-              {isActive && auction.highestBidder && (
+              {isActive && auction.highestBidder &&
+                auction.highestBidder.toBase58() !== "11111111111111111111111111111111" && (
                 <span className="text-[10px] tracking-[0.15em] text-cream/30 uppercase">
                   Leader:{" "}
                   <span className="text-gold/70">
@@ -1486,7 +1487,7 @@ export default function AuctionRoomPage({
                         MagicBlock Ephemeral Rollup
                       </span>
                       <span className="text-[10px] text-emerald-400/40">
-                        Sub-50ms bid confirmation
+                        Bid confirmed on-chain
                       </span>
                     </div>
                   </div>
